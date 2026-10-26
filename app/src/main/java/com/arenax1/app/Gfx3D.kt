@@ -317,9 +317,9 @@ class MsaaChooser : GLSurfaceView.EGLConfigChooser {
     }
 }
 
-const val SKY_R = 0.36f
-const val SKY_G = 0.50f
-const val SKY_B = 0.70f
+const val SKY_R = 0.10f
+const val SKY_G = 0.14f
+const val SKY_B = 0.28f
 
 class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
 
@@ -346,9 +346,11 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         varying vec4 vC;
         varying float vFog;
         varying vec3 vW;
+        varying float vLit;
         void main() {
             float l = length(aN);
             vW = aP;
+            vLit = l > 0.5 ? 1.0 : 0.0;
             vec3 pos = aP;
             vec3 col = aC.rgb;
             if (uOut > 0.0) {
@@ -373,7 +375,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 vec3 V = normalize(uCam - aP);
                 float ndl = dot(n, L);
                 float band = smoothstep(-0.05, 0.6, ndl);
-                vec3 amb = mix(vec3(0.26, 0.29, 0.40), vec3(0.58, 0.68, 0.92), n.y * 0.5 + 0.5);
+                vec3 amb = mix(vec3(0.20, 0.24, 0.40), vec3(0.44, 0.56, 0.90), n.y * 0.5 + 0.5);
                 float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);
                 vec3 H = normalize(L + V);
                 float spec = pow(max(dot(n, H), 0.0), 36.0) * 0.32;
@@ -390,8 +392,9 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         uniform vec3 uFog;
         varying vec4 vC;
         varying float vFog;
+        varying float vLit;
         void main() {
-            vec3 c = mix(vC.rgb, uFog, vFog);
+            vec3 c = mix(vC.rgb * mix(1.0, 0.7, vLit), uFog, vFog);
             float lum = dot(c, vec3(0.299, 0.587, 0.114));
             c = mix(vec3(lum), c, 1.18);
             c = (c - 0.5) * 1.06 + 0.5;
@@ -411,6 +414,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         varying vec4 vC;
         varying float vFog;
         varying vec3 vW;
+        varying float vLit;
         float h21(vec2 p) {
             vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
             p3 += dot(p3, p3.yzx + 33.33);
@@ -441,10 +445,12 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 float ice = smoothstep(0.62, 0.8, n1) * smoothstep(0.55, 0.85, l0);
                 c = mix(c, c * vec3(0.90, 0.97, 1.08), ice * 0.5);
             }
+            float ex = uDet > 0.5 ? 0.62 : 0.88;
+            c *= mix(1.0, ex, vLit);
             c = mix(c, uFog, vFog);
             float lum = dot(c, vec3(0.299, 0.587, 0.114));
-            c = mix(vec3(lum), c, 1.18);
-            c = (c - 0.5) * 1.06 + 0.5;
+            c = mix(vec3(lum), c, 1.22);
+            c = (c - 0.5) * 1.10 + 0.5;
             gl_FragColor = vec4(c, vC.a);
         }
     """.trimIndent()

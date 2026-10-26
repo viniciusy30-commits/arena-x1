@@ -66,15 +66,15 @@ private fun terrainColor(x: Float, z: Float): Int {
     var c: Int
     if (d > 0f) {
         val rock = rgbI(58f + n * 34f, 70f + n * 34f, 96f + n * 38f)
-        val snow = rgbI(232f - n * 14f, 241f - n * 10f, 250f)
+        val snow = rgbI(196f - n * 14f, 214f - n * 10f, 240f)
         c = mixCol(snow, rock, (d - 14f) / 70f)
         c = mixCol(c, rgbI(34f + n * 20f, 44f + n * 22f, 70f + n * 26f), ((d - 190f) / 160f).coerceIn(0f, 1f))
         if (n2 > 0.62f && d > 90f) c = mixCol(c, rgbI(120f, 190f, 230f), 0.35f)
     } else if (z in 400f..880f) {
-        c = rgbI(86f + n * 10f, 98f + n * 10f, 120f + n * 10f)
+        c = rgbI(62f + n * 8f, 74f + n * 8f, 100f + n * 8f)
     } else {
         val patch = vnoise(x * 0.006f + 40f, z * 0.02f)
-        c = rgbI(222f + n * 12f - n2 * 22f, 234f + n * 8f - n2 * 18f, 248f - n2 * 8f)
+        c = rgbI(176f + n * 12f - n2 * 22f, 196f + n * 10f - n2 * 18f, 232f - n2 * 8f)
         c = mixCol(c, rgbI(150f, 176f, 212f), patch * 0.35f)
         if (z in 372f..400f || z in 880f..908f) c = mixCol(c, rgbI(120f, 138f, 168f), 0.5f)
 

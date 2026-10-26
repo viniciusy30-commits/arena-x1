@@ -369,6 +369,7 @@ class Scene(private val g: GameView) {
             while (cxp < MAP_W - 700f) {
                 val sd = if (ci % 2 == 0) -1 else 1
                 val gcol = if (cxp < midX) cyanG else redG
+                val bt = chunkOf(cxp)
                 crystals(bt, cxp, 640f + sd * (laneHalf(cxp) + 55f), 1.15f + hash2(ci, 811) * 0.5f, gcol, 900 + ci)
                 cxp += 480f + hash2(ci, 812) * 160f
                 ci++

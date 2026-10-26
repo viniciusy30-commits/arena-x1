@@ -317,9 +317,9 @@ class MsaaChooser : GLSurfaceView.EGLConfigChooser {
     }
 }
 
-const val SKY_R = 0.10f
-const val SKY_G = 0.14f
-const val SKY_B = 0.28f
+const val SKY_R = 0.20f
+const val SKY_G = 0.27f
+const val SKY_B = 0.46f
 
 class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
 

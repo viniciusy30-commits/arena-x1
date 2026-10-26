@@ -184,7 +184,7 @@ class Scene(private val g: GameView) {
                     if (hs < 0.78f) {
                         bt.box(0f, 13f, 0f, 58f, 26f, 22f, shadeCol(stone, 0.85f + hs * 0.3f))
                         if (hs < 0.5f) bt.box(0f, 27.5f, 0f, 56f, 4f, 20f, snowC)
-                        if (hs < 0.3f) bt.box(0f, 14f, -sd * 11.3f, 22f, 2.2f, 0.8f, mixCol(glowOf(xm), stoneD, 0.45f), 1f, false)
+                        bt.box(0f, 17f, -sd * 11.3f, 50f, 3f, 0.8f, mixCol(glowOf(xm), white, 0.15f), 1f, false)
                     } else if (hs < 0.92f) {
                         bt.box(0f, 5f, 0f, 40f, 10f, 22f, shadeCol(stone, 0.8f))
                         bt.box(14f, 13f, sd * 3f, 18f, 8f, 16f, stoneD)
@@ -230,18 +230,21 @@ class Scene(private val g: GameView) {
                     val d = min(zEnd - zc, 56f + hash2(col, row + 90) * 44f)
                     val zm = zc + d / 2f
                     val hsh = hash2(col * 13 + row, 40 + row)
-                    val tint = mixCol(cc(0xFFA3B1C8), if (ally) cc(0xFF9FB8E4) else cc(0xFFE2B0A6), 0.10f)
-                    val cold = mixCol(tint, cc(0xFFC9D8EC), hash2(col, row + 130) * 0.35f)
+                    val mid = 1f - (abs(zm - 640f) / hw).coerceIn(0f, 1f)
+                    val side = (abs(xm - midX) / midX).coerceIn(0f, 1f)
+                    val tint = mixCol(cc(0xFFB4BCCB), if (ally) cc(0xFF6FA6D8) else cc(0xFFD9806E), 0.18f + 0.40f * side)
+                    var cold = mixCol(tint, cc(0xFFE6E2D2), (0.10f + mid * 0.22f) * (1f - side * 0.6f) + hash2(col, row + 130) * 0.12f)
+                    if (abs(zm - 640f) > hw - 110f) cold = mixCol(cold, cc(0xFF4A5470), 0.45f)
                     bt.box(xm, -0.5f + hsh * 0.35f, zm, bw - 2.5f, 2f, d - 2.5f, shadeCol(cold, 0.84f + hsh * 0.3f))
                     val edgeZone = abs(zm - 640f) > hw - 170f
-                    if (hash2(col, row + 170) < 0.16f) {
+                    if (hash2(col, row + 170) < 0.09f) {
                         bt.push()
                         bt.tr(xm + (hsh - 0.5f) * bw * 0.3f, 0.9f, zm)
                         bt.rotY(hsh * 160f)
                         bt.box(0f, 0f, 0f, bw * 0.6f, 0.3f, 1.6f, cc(0xFF3B465E), 1f, false)
                         bt.pop()
                     }
-                    if (edgeZone && hash2(col, row + 210) < 0.45f) {
+                    if (edgeZone && hash2(col, row + 210) < 0.12f) {
                         bt.sphere(xm + (hsh - 0.5f) * bw * 0.4f, 0.9f, zm, bw * 0.34f, 1.6f, d * 0.3f, snowC, 1f, true, 6, 3)
                     }
                     if (hash2(col, row + 250) < 0.05f) {
@@ -361,12 +364,12 @@ class Scene(private val g: GameView) {
 
         // ---- abismo: espirais de rocha com topo nevado
         run {
-            for (i in 0 until 230) {
+            for (i in 0 until 95) {
                 val x = -300f + hash2(i, 401) * (MAP_W + 600f)
                 val side = if (hash2(i, 402) < 0.5f) -1 else 1
-                val z = 640f + side * (laneHalf(x) + 70f + hash2(i, 403) * 320f)
+                val z = 640f + side * (laneHalf(x) + 260f + hash2(i, 403) * 420f)
                 val base = groundH(x, z)
-                val cap = if (side > 0) 90f else 260f
+                val cap = if (side > 0) 40f else 150f
                 val top = -60f + hash2(i, 404) * (cap + 60f)
                 val h = max(60f, top - base)
                 val r = 30f + hash2(i, 405) * 50f

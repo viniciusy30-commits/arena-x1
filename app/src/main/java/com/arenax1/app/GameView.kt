@@ -183,7 +183,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         super.onSizeChanged(w, h, ow, oh)
-        if (w > 0 && h > 0) glv.holder.setFixedSize((w * 0.75f).toInt(), (h * 0.75f).toInt())
+        if (w > 0 && h > 0) glv.holder.setFixedSize((w * 0.9f).toInt(), (h * 0.9f).toInt())
         val wf = w.toFloat()
         val hf = h.toFloat()
         bx[4] = wf - 90f * d; by[4] = hf - 85f * d; br[4] = 46f * d

@@ -35,7 +35,7 @@ class Batch {
     /** 0 = automático (alpha<1 vai para translúcido), 2 = aditivo. */
     var mode = 0
 
-    private val stack = Array(24) { FloatArray(16) }
+    private val stack = Array(40) { FloatArray(16) }
     private var sp = 0
     private val m: FloatArray get() = stack[sp]
 
@@ -83,13 +83,14 @@ class Batch {
         cb = (col and 255) / 255f
         ca = a * (((col ushr 24) and 255) / 255f)
         tb = target(ca)
-        tb.need(3000)
+        tb.need(12000)
     }
 
     /** Emite um vértice transformado pela matriz atual. */
     private fun vx(px: Float, py: Float, pz: Float, nx: Float, ny: Float, nz: Float) {
         val a = m
         val b = tb
+        if (b.n + 12 > b.v.size) b.need(12)
         val o = b.v
         var i = b.n
         o[i++] = a[0] * px + a[4] * py + a[8] * pz + a[12]

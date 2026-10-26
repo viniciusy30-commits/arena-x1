@@ -36,6 +36,15 @@ fun vnoise(x: Float, z: Float): Float {
 
 const val MAP_W = 7200f
 
+/** Moitas da lane (x, z, raio): esconderijo estilo ARAM, nas bordas e ao lado da ponte. */
+val BRUSHES: List<FloatArray> by lazy {
+    val l = ArrayList<FloatArray>()
+    val xs = floatArrayOf(MAP_W * 0.20f, MAP_W * 0.30f, MAP_W * 0.41f, MAP_W / 2f - 340f,
+        MAP_W / 2f + 340f, MAP_W * 0.59f, MAP_W * 0.70f, MAP_W * 0.80f)
+    for (x in xs) for (z in floatArrayOf(305f, 975f)) l.add(floatArrayOf(x, z, 85f))
+    l
+}
+
 /** Altura do chão no ponto (x, z). z do mundo = y do jogo. */
 fun groundH(x: Float, z: Float): Float {
     val d = if (z < 170f) 170f - z else if (z > 1110f) z - 1110f else 0f
@@ -50,7 +59,7 @@ fun groundH(x: Float, z: Float): Float {
     if (dx < 180f) {
         val k = 1f - dx / 180f
         val dip = k * k * (3f - 2f * k)
-        val onBridge = z > 395f && z < 885f
+        val onBridge = z > 265f && z < 1015f
         h = if (onBridge) 0.8f else h - dip * 9f
     }
     return h
@@ -70,13 +79,13 @@ private fun terrainColor(x: Float, z: Float): Int {
         c = mixCol(snow, rock, (d - 14f) / 70f)
         c = mixCol(c, rgbI(34f + n * 20f, 44f + n * 22f, 70f + n * 26f), ((d - 190f) / 160f).coerceIn(0f, 1f))
         if (n2 > 0.62f && d > 90f) c = mixCol(c, rgbI(120f, 190f, 230f), 0.35f)
-    } else if (z in 400f..880f) {
+    } else if (z in 255f..1025f) {
         c = rgbI(62f + n * 8f, 74f + n * 8f, 100f + n * 8f)
     } else {
         val patch = vnoise(x * 0.006f + 40f, z * 0.02f)
         c = rgbI(176f + n * 12f - n2 * 22f, 196f + n * 10f - n2 * 18f, 232f - n2 * 8f)
         c = mixCol(c, rgbI(150f, 176f, 212f), patch * 0.35f)
-        if (z in 372f..400f || z in 880f..908f) c = mixCol(c, rgbI(120f, 138f, 168f), 0.5f)
+        if (z in 228f..255f || z in 1025f..1052f) c = mixCol(c, rgbI(120f, 138f, 168f), 0.5f)
 
     }
     val dx = abs(x - MAP_W / 2f)
@@ -180,7 +189,7 @@ class Scene(private val g: GameView) {
         // flores e pedras no gramado
         for (i in 0 until 340) {
             val x = 100f + hash2(i, 1) * (MAP_W - 200f)
-            val z = if (hash2(i, 2) < 0.5f) 200f + hash2(i, 3) * 160f else 920f + hash2(i, 4) * 160f
+            val z = if (hash2(i, 2) < 0.5f) 175f + hash2(i, 3) * 60f else 1045f + hash2(i, 4) * 60f
             val kind = hash2(i, 5)
             val bt = chunkOf(x)
             val gy = groundH(x, z)
@@ -245,14 +254,14 @@ class Scene(private val g: GameView) {
         run {
             val cx = MAP_W / 2f
             val bt = chunkOf(cx)
-            bt.box(cx, -1.8f, 640f, 380f, 5.2f, 480f, cc(0xFFA9B6C8))
+            bt.box(cx, -1.8f, 640f, 380f, 5.2f, 750f, cc(0xFFA9B6C8))
             var px = cx - 180f
             while (px <= cx + 180f) {
-                bt.box(px, 0.9f, 640f, 2f, 0.4f, 468f, cc(0xFF6F7C92))
+                bt.box(px, 0.9f, 640f, 2f, 0.4f, 738f, cc(0xFF6F7C92))
                 px += 36f
             }
             for (sd in intArrayOf(-1, 1)) {
-                val zz = 640f + sd * 236f
+                val zz = 640f + sd * 371f
                 bt.box(cx, 8f, zz, 380f, 12f, 8f, cc(0xFFC3D0E2))
                 var qx = cx - 180f
                 while (qx <= cx + 180f) {
@@ -268,22 +277,22 @@ class Scene(private val g: GameView) {
             for (e in intArrayOf(-1, 1)) {
                 val ax = cx + e * 196f
                 for (sd in intArrayOf(-1, 1)) {
-                    bt.cyl(ax, 0f, 640f + sd * 236f, 15f, 12f, 86f, stoneL, 10)
-                    bt.cyl(ax, 86f, 640f + sd * 236f, 17f, 17f, 6f, stoneD, 10)
-                    bt.sphere(ax, 100f, 640f + sd * 236f, 8f, 10f, 8f, cc(0xFF8FE3FF), 1f, false, 8, 5)
+                    bt.cyl(ax, 0f, 640f + sd * 371f, 15f, 12f, 86f, stoneL, 10)
+                    bt.cyl(ax, 86f, 640f + sd * 371f, 17f, 17f, 6f, stoneD, 10)
+                    bt.sphere(ax, 100f, 640f + sd * 371f, 8f, 10f, 8f, cc(0xFF8FE3FF), 1f, false, 8, 5)
                 }
-                bt.box(ax, 80f, 640f, 14f, 9f, 486f, stoneL)
-                bt.box(ax, 75f, 640f, 8f, 2f, 470f, cc(0xFF8FE3FF), 1f, false)
+                bt.box(ax, 80f, 640f, 14f, 9f, 756f, stoneL)
+                bt.box(ax, 75f, 640f, 8f, 2f, 740f, cc(0xFF8FE3FF), 1f, false)
             }
             for (sd in intArrayOf(-1, 1)) {
-                bt.box(cx, 1.3f, 640f + sd * 150f, 360f, 0.3f, 3f, cc(0xFF8FE3FF), 1f, false)
-                bt.box(cx, 1.3f, 640f + sd * 70f, 360f, 0.3f, 2f, cc(0xFF8FE3FF), 1f, false)
+                bt.box(cx, 1.3f, 640f + sd * 260f, 360f, 0.3f, 3f, cc(0xFF8FE3FF), 1f, false)
+                bt.box(cx, 1.3f, 640f + sd * 130f, 360f, 0.3f, 2f, cc(0xFF8FE3FF), 1f, false)
             }
             for (k in 0 until 44) {
                 for (sd in intArrayOf(-1, 1)) {
                     val x = cx - 188f + k * 8.6f + hash2(k, 140 + sd) * 4f
                     val h = 10f + hash2(k, 150 + sd) * 34f
-                    bt.cyl(x, -5f - h, 640f + sd * 242f, 0f, 2.6f, h, cc(0xFFC9ECFF), 5)
+                    bt.cyl(x, -5f - h, 640f + sd * 377f, 0f, 2.6f, h, cc(0xFFC9ECFF), 5)
                 }
             }
         }
@@ -295,8 +304,8 @@ class Scene(private val g: GameView) {
                 if (abs(px + 32f - MAP_W / 2f) > 235f) {
                     val bt = chunkOf(px)
                     val ally = px < MAP_W / 2f
-                    for (row in 0 until 7) {
-                        val zc = 430f + row * 70f
+                    for (row in 0 until 11) {
+                        val zc = 280f + row * 70f
                         val hsh = hash2(col, row + 40)
                         val shade = 0.86f + hsh * 0.26f
                         val base = cc(0xFFA9B6CC)
@@ -315,8 +324,8 @@ class Scene(private val g: GameView) {
                     val bt = chunkOf(qx)
                     val gl = if (qx < MAP_W / 2f) cc(0xFF4FC3F7) else cc(0xFFFF6B5E)
                     for (sd in intArrayOf(-1, 1)) {
-                        bt.box(qx + 70f, 2f, 640f + sd * 243f, 140f, 5f, 9f, cc(0xFF8C9AB2))
-                        bt.box(qx + 70f, 4.6f, 640f + sd * 243f, 140f, 0.8f, 3f, gl)
+                        bt.box(qx + 70f, 2f, 640f + sd * 375f, 140f, 5f, 9f, cc(0xFF8C9AB2))
+                        bt.box(qx + 70f, 4.6f, 640f + sd * 375f, 140f, 0.8f, 3f, gl)
                     }
                     bt.box(qx + 70f, 0.8f, 640f, 70f, 0.4f, 3.5f, gl, 1f, false)
                 }
@@ -328,7 +337,7 @@ class Scene(private val g: GameView) {
             for (i in 0 until 1100) {
                 val x = 60f + hash2(i, 61) * (MAP_W - 120f)
                 val top = hash2(i, 62) < 0.5f
-                val z = if (top) 180f + hash2(i, 63) * 190f else 910f + hash2(i, 64) * 190f
+                val z = if (top) 170f + hash2(i, 63) * 70f else 1040f + hash2(i, 64) * 70f
                 if (abs(x - MAP_W / 2f) < 200f) continue
                 val bt = chunkOf(x)
                 val gy = groundH(x, z)
@@ -340,7 +349,7 @@ class Scene(private val g: GameView) {
             for (i in 0 until 46) {
                 val x = 500f + hash2(i, 81) * (MAP_W - 1000f)
                 if (abs(x - MAP_W / 2f) < 330f) continue
-                val z = if (hash2(i, 82) < 0.5f) 200f + hash2(i, 83) * 130f else 930f + hash2(i, 84) * 130f
+                val z = if (hash2(i, 82) < 0.5f) 150f + hash2(i, 83) * 70f else 1050f + hash2(i, 84) * 70f
                 rock(chunkOf(x), x, z, 18f + hash2(i, 85) * 10f, i + 300, true)
             }
             for (i in 0 until 70) {
@@ -378,7 +387,7 @@ class Scene(private val g: GameView) {
                     val ally = px < MAP_W / 2f
                     val gl = if (ally) cc(0xFF4FC3F7) else cc(0xFFFF5252)
                     for (sd in intArrayOf(-1, 1)) {
-                        val pz = 640f + sd * 262f
+                        val pz = 640f + sd * 392f
                         val gy = groundH(px, pz)
                         bt.cyl(px, gy, pz, 9f, 7f, 30f, stoneL, 6)
                         bt.cyl(px, gy + 30f, pz, 10f, 10f, 4f, stoneD, 6)
@@ -393,21 +402,17 @@ class Scene(private val g: GameView) {
             for (k in 0 until 14) {
                 val sd = if (k % 2 == 0) -1 else 1
                 val rx = MAP_W / 2f + sd * (210f + hash2(k, 21) * 40f)
-                val rz = 330f + hash2(k, 22) * 620f
+                val rz = 270f + hash2(k, 22) * 740f
                 val bt = chunkOf(rx)
                 rock(bt, rx, rz, 22f + hash2(k, 23) * 14f, k + 1200, true)
             }
         }
-        // moitas na lane (dois pontos de cada lado, como no ARAM) e cristais no abismo
+        // moitas nas bordas da lane e ao lado da ponte (esconderijo estilo ARAM)
         run {
-            val fr = floatArrayOf(0.20f, 0.30f, 0.41f, 0.59f, 0.70f, 0.80f)
             var sdx = 0
-            for (f in fr) {
-                val bx = MAP_W * f
-                for (zc in floatArrayOf(418f, 862f)) {
-                    brush(chunkOf(bx), bx, zc, 62f, sdx * 17 + 5)
-                    sdx++
-                }
+            for (bq in BRUSHES) {
+                brush(chunkOf(bq[0]), bq[0], bq[1], bq[2], sdx * 17 + 5)
+                sdx++
             }
             for (i in 0 until 26) {
                 val x = 200f + hash2(i, 161) * (MAP_W - 400f)
@@ -415,6 +420,44 @@ class Scene(private val g: GameView) {
                 val z = if (hash2(i, 162) < 0.5f) 150f else 1130f
                 val cr = if (x < MAP_W / 2f) cc(0xFF5BC8FF) else cc(0xFFFF7BC6)
                 crystals(chunkOf(x), x, z, 0.8f + hash2(i, 163) * 0.9f, cr, i + 1500)
+            }
+        }
+        // paredões de gelo do abismo nas duas bordas, com topos nevados e veios luminosos
+        run {
+            for (i in 0 until 120) {
+                val x = -200f + i * 62f + hash2(i, 201) * 40f
+                for (side in 0..1) {
+                    val z = if (side == 0) 128f - hash2(i, 202 + side) * 30f else 1152f + hash2(i, 204 + side) * 30f
+                    val bt = chunkOf(x)
+                    val h = 90f + hash2(i, 206 + side) * 150f
+                    val r = 26f + hash2(i, 208 + side) * 20f
+                    val gy = groundH(x, z)
+                    val ice = mixCol(cc(0xFF3E5078), cc(0xFF7FA6D6), hash2(i, 210 + side))
+                    bt.cyl(x, gy - 4f, z, r, r * 0.35f, h, ice, 6)
+                    bt.cyl(x, gy + h * 0.8f - 4f, z, r * 0.4f, 0f, h * 0.35f, cc(0xFFCFE2F6), 6)
+                    if (hash2(i, 212 + side) < 0.35f) {
+                        val vz = z + (if (side == 0) 1f else -1f) * r * 0.55f
+                        bt.box(x, gy + h * 0.45f, vz, 3f, h * 0.55f, 3f, cc(0xFF7FE3FF), 1f, false)
+                    }
+                }
+            }
+            // braseiros de gelo ao longo da lane
+            var bx = 900f
+            var bi = 0
+            while (bx < MAP_W - 800f) {
+                if (abs(bx - MAP_W / 2f) > 320f) {
+                    val bt = chunkOf(bx)
+                    val gl = if (bx < MAP_W / 2f) cc(0xFF4FC3F7) else cc(0xFFFF6B5E)
+                    for (sd in intArrayOf(-1, 1)) {
+                        val bz = 640f + sd * 420f
+                        val gy = groundH(bx, bz)
+                        bt.cyl(bx, gy, bz, 7f, 5f, 18f, stoneD, 6)
+                        bt.cyl(bx, gy + 18f, bz, 11f, 13f, 5f, stoneL, 8)
+                        bt.sphere(bx, gy + 27f, bz, 8f, 11f, 8f, gl, 1f, false, 7, 4)
+                    }
+                    bi++
+                }
+                bx += 480f
             }
         }
         for (ci in 0 until nChunks) {
@@ -531,13 +574,27 @@ class Scene(private val g: GameView) {
             val fy = 760f - ((t * spd + i * 61f) % 760f)
             b.box(fx, fy, fz, 2.6f, 2.6f, 2.6f, white, 0.75f, false)
         }
+        // névoa de gelo rasteira sobre a lane e o rio
+        b.mode = 2
+        for (i in 0 until 26) {
+            val mx = cx - 1400f + ((i * 0.618034f) % 1f) * 2800f + sin(t * 0.25f + i) * 60f
+            val mz = 300f + ((i * 0.381966f + 0.3f) % 1f) * 680f
+            b.box(mx, 5f + (i % 3) * 3f, mz, 240f, 4f, 90f, cc(0xFFBFD8F2), 0.10f, false)
+        }
+        // faíscas de gelo subindo do rio
+        for (i in 0 until 24) {
+            val py = ((t * (22f + (i % 5) * 6f) + i * 37f) % 150f)
+            val px = wx + sin(t * 0.7f + i * 1.7f) * 110f
+            val pz = ((i * 71f + t * 30f) % 1100f) + 90f
+            b.box(px, -2f + py, pz, 2.4f, 2.4f, 2.4f, cc(0xFF9FEAFF), 0.7f * (1f - py / 150f), false)
+        }
         b.mode = 0
         for (tw in g.towers) {
             if (abs(tw.x - cx) > 2700f) continue
             if (tw.dead) rubble(tw) else tower(tw)
         }
         for (m in g.minions) {
-            if (m.dead || abs(m.x - cx) > 2500f) continue
+            if (m.dead || abs(m.x - cx) > 2500f || g.hiddenFor(m, 0)) continue
             place(m)
             fl = m.flash > 0f
             b.sc(1.7f, 1.7f, 1.7f)
@@ -546,7 +603,7 @@ class Scene(private val g: GameView) {
             shadow(m.x, m.y, 22f)
         }
         for (c in g.champs) {
-            if (c.dead || abs(c.x - cx) > 2500f) continue
+            if (c.dead || abs(c.x - cx) > 2500f || g.hiddenFor(c, 0)) continue
             place(c)
             fl = c.flash > 0f
             b.sc(1.9f, 1.9f, 1.9f)

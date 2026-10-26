@@ -94,8 +94,8 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
     internal val W = MAP_W
     internal val H = 1280f
-    internal val LT = 320f
-    internal val LB = 960f
+    internal val LT = 250f
+    internal val LB = 1030f
     internal val CY = 640f
     internal val d = resources.displayMetrics.density
     internal val rnd = Random(System.nanoTime())
@@ -229,7 +229,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             if (spawnGap <= 0f) {
                 val idx = 5 - spawnQ
                 val caster = idx >= 3
-                val yy = CY + rnd.nextFloat() * 90f - 45f
+                val yy = CY + rnd.nextFloat() * 220f - 110f
                 minions.add(Minion(640f, yy, 0, caster))
                 minions.add(Minion(W - 640f, yy, 1, caster))
                 spawnQ--
@@ -366,11 +366,31 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         }
     }
 
+    internal fun brushOf(x: Float, y: Float): Int {
+        for (i in BRUSHES.indices) {
+            val q = BRUSHES[i]
+            if (hypot(x - q[0], y - q[1]) < q[2] + 6f) return i
+        }
+        return -1
+    }
+
+    /** Unidade dentro da moita fica invisível para o time rival, salvo se alguém dele estiver perto ou na mesma moita. */
+    internal fun hiddenFor(u: U, viewer: Int): Boolean {
+        if (u.team == viewer || u.dead) return false
+        val k = brushOf(u.x, u.y)
+        if (k < 0) return false
+        for (a in all) {
+            if (a.dead || a.team != viewer) continue
+            if (hypot(a.x - u.x, a.y - u.y) < 320f || brushOf(a.x, a.y) == k) return false
+        }
+        return true
+    }
+
     private fun nearest(x: Float, y: Float, team: Int, range: Float, champPen: Float): U? {
         var b: U? = null
         var bs = 1e9f
         for (u in all) {
-            if (u.dead || u.team == team) continue
+            if (u.dead || u.team == team || hiddenFor(u, team)) continue
             val dd = hypot(u.x - x, u.y - y) - u.r
             if (dd > range) continue
             val s = dd + when (u) {
@@ -518,7 +538,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
     private fun botThink(b: Champ, dt: Float) {
         val p = pl
-        val dp = if (p.dead) 1e9f else hypot(p.x - b.x, p.y - b.y)
+        val dp = if (p.dead || hiddenFor(p, b.team)) 1e9f else hypot(p.x - b.x, p.y - b.y)
         val homeX = W - 380f
         var minX = 0f
         for (tw in towers) if (!tw.dead && tw.team == 0) minX = max(minX, tw.x + if (tw.nexus) 560f else 680f)
@@ -782,11 +802,11 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             bar(c, tw, if (tw.nexus) 130f else 80f, if (tw.nexus) 290f else 172f)
         }
         for (m in minions) {
-            if (m.dead || abs(m.x - camX) > viewW) continue
+            if (m.dead || abs(m.x - camX) > viewW || hiddenFor(m, 0)) continue
             bar(c, m, 36f, 76f)
         }
         for (ch in champs) {
-            if (ch.dead) continue
+            if (ch.dead || hiddenFor(ch, 0)) continue
             bar(c, ch, 70f, 128f)
             if (proj(ch.x, groundH(ch.x, ch.y) + 128f, ch.y)) {
                 tp.textSize = 12f * d
@@ -905,13 +925,13 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             val s = if (tw.nexus) 5f * d else 3.5f * d
             c.drawRect(mx + tw.x / W * mw - s, my + mh / 2f - s, mx + tw.x / W * mw + s, my + mh / 2f + s, pt)
         }
-        for (m in minions) if (!m.dead) {
+        for (m in minions) if (!m.dead && !hiddenFor(m, 0)) {
             pt.color = if (m.team == 0) C(0xFF81D4FA) else C(0xFFFF8A80)
             val xx = mx + m.x / W * mw
             val yy = my + (m.y - LT) / (LB - LT) * mh
             c.drawRect(xx - d, yy - d, xx + d, yy + d, pt)
         }
-        for (ch in champs) if (!ch.dead) {
+        for (ch in champs) if (!ch.dead && !hiddenFor(ch, 0)) {
             pt.color = if (ch.team == 0) C(0xFFFFFFFF) else C(0xFFFFEB3B)
             val xx = mx + ch.x / W * mw
             val yy = my + (ch.y - LT) / (LB - LT) * mh

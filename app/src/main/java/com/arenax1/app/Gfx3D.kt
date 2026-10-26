@@ -296,6 +296,8 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
     private var prog = 0
     private var uVP = 0
     private var uFog = 0
+    private var uCam = 0
+    private var uOut = 0
     private var aP = 0
     private var aN = 0
     private var aC = 0
@@ -305,21 +307,45 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
 
     private val VS = """
         uniform mat4 uVP;
+        uniform vec3 uCam;
+        uniform float uOut;
         attribute vec3 aP;
         attribute vec3 aN;
         attribute vec4 aC;
         varying vec4 vC;
         varying float vFog;
         void main() {
-            gl_Position = uVP * vec4(aP, 1.0);
             float l = length(aN);
+            vec3 pos = aP;
             vec3 col = aC.rgb;
+            if (uOut > 0.0) {
+                if (l < 0.5) {
+                    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+                    vC = vec4(0.0);
+                    vFog = 0.0;
+                    return;
+                }
+                float w0 = (uVP * vec4(aP, 1.0)).w;
+                pos = aP + (aN / l) * uOut * (w0 / 1100.0);
+                gl_Position = uVP * vec4(pos, 1.0);
+                gl_Position.z += gl_Position.w * 0.004;
+                vC = vec4(col * 0.22 + vec3(0.01, 0.015, 0.04), aC.a);
+                vFog = clamp((gl_Position.w - 1900.0) / 3200.0, 0.0, 1.0);
+                return;
+            }
+            gl_Position = uVP * vec4(pos, 1.0);
             if (l > 0.5) {
                 vec3 n = aN / l;
-                float diff = max(dot(n, normalize(vec3(-0.35, 0.85, 0.40))), 0.0);
-                float back = max(dot(n, normalize(vec3(0.5, 0.2, -0.6))), 0.0);
-                vec3 lc = vec3(0.50, 0.54, 0.64) + diff * vec3(0.62, 0.56, 0.42) + back * vec3(0.10, 0.12, 0.18);
-                col = col * lc;
+                vec3 L = normalize(vec3(-0.35, 0.85, 0.40));
+                vec3 V = normalize(uCam - aP);
+                float ndl = dot(n, L);
+                float band = smoothstep(-0.05, 0.6, ndl);
+                vec3 amb = mix(vec3(0.36, 0.33, 0.31), vec3(0.60, 0.68, 0.86), n.y * 0.5 + 0.5);
+                float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(n, H), 0.0), 36.0) * 0.32;
+                vec3 lc = amb * 0.84 + band * vec3(0.68, 0.60, 0.44) + rim * vec3(0.18, 0.23, 0.34);
+                col = col * lc + spec * vec3(1.0, 0.96, 0.86);
             }
             vC = vec4(col, aC.a);
             vFog = clamp((gl_Position.w - 1900.0) / 3200.0, 0.0, 1.0);
@@ -332,7 +358,10 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         varying vec4 vC;
         varying float vFog;
         void main() {
-            gl_FragColor = vec4(mix(vC.rgb, uFog, vFog), vC.a);
+            vec3 c = mix(vC.rgb, uFog, vFog);
+            float lum = dot(c, vec3(0.299, 0.587, 0.114));
+            c = mix(vec3(lum), c, 1.14);
+            gl_FragColor = vec4(c, vC.a);
         }
     """.trimIndent()
 
@@ -359,6 +388,8 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         GLES20.glLinkProgram(prog)
         uVP = GLES20.glGetUniformLocation(prog, "uVP")
         uFog = GLES20.glGetUniformLocation(prog, "uFog")
+        uCam = GLES20.glGetUniformLocation(prog, "uCam")
+        uOut = GLES20.glGetUniformLocation(prog, "uOut")
         aP = GLES20.glGetAttribLocation(prog, "aP")
         aN = GLES20.glGetAttribLocation(prog, "aN")
         aC = GLES20.glGetAttribLocation(prog, "aC")
@@ -388,6 +419,8 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         synchronized(g.lock) {
             GLES20.glUniformMatrix4fv(uVP, 1, false, g.vp, 0)
             GLES20.glUniform3f(uFog, SKY_R, SKY_G, SKY_B)
+            GLES20.glUniform3f(uCam, g.camPos[0], g.camPos[1], g.camPos[2])
+            GLES20.glUniform1f(uOut, 0f)
             val b = g.scene.frame()
             val cx = g.camX
             // terreno e cenário fixo (por pedaços visíveis)
@@ -399,6 +432,9 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 attribs()
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, s.count)
             }
+            GLES20.glUniform1f(uOut, 1.9f)
+            drawBuf(b.opq)
+            GLES20.glUniform1f(uOut, 0f)
             drawBuf(b.opq)
             GLES20.glEnable(GLES20.GL_BLEND)
             GLES20.glDepthMask(false)

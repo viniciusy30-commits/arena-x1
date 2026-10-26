@@ -1,7 +1,6 @@
-#id 2026-10-26-c
-#titulo Mapa gigante e visual refinado
-- Mapa bem maior, no estilo ARAM, com pilares e muretas na lane
-- Câmera mais afastada para ver mais do combate
-- Lux com saia em pétalas, fita, faíscas orbitando e sigilo ao conjurar
-- Magias redesenhadas: laço em hélice, zona com estrela e pilares, laser com anéis de energia
-- Escudo com cúpula brilhante e velocidades ajustadas ao novo mapa
+#id 2026-10-26-d
+#titulo Visual estilo MOBA mobile
+- Contorno nos personagens e torres, luz de borda e brilho nos modelos
+- Lux remodelada: rosto com olhos grandes, franja, tranças em corrente, asas, botas, ombreiras e cajado com cristal
+- Lane com lajotas, meio-fio dourado e linha de energia; capim, arbustos, cristais e montanhas ao fundo
+- Torres com ameias, pilares e runas; minions mais detalhados

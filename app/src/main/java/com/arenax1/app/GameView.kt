@@ -111,6 +111,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal val deadFx = ArrayList<DeadFx>()
     internal val lock = Any()
     internal val vp = FloatArray(16)
+    internal val camPos = FloatArray(3)
     internal var viewW = 1600f
     internal val scene = Scene(this)
     internal var pl = Champ(540f, 640f, 0, true)
@@ -735,6 +736,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         }
         val aspect = if (height > 0) width.toFloat() / height.toFloat() else 2f
         Matrix.perspectiveM(projM, 0, 45f, aspect, 150f, 7000f)
+        camPos[0] = camX + sx; camPos[1] = 900f; camPos[2] = CY + 620f + sz
         Matrix.setLookAtM(viewM, 0, camX + sx, 900f, CY + 620f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
         Matrix.multiplyMM(vp, 0, projM, 0, viewM, 0)
         viewW = 930f * aspect

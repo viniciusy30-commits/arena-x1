@@ -12,6 +12,7 @@ import javax.microedition.khronos.egl.EGLDisplay
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -37,6 +38,9 @@ class Batch {
 
     /** Lote dinâmico: limita a resolução das formas para ganhar desempenho. */
     var lod = false
+
+    /** Fator de qualidade das formas curvas (1 = cheio). Reduz custo em objetos numerosos. */
+    var dq = 1f
 
     private val stack = Array(40) { FloatArray(16) }
     private var sp = 0
@@ -153,7 +157,8 @@ class Batch {
 
     /** Cilindro/cone vertical: base em y0 com raio r0, topo em y0+h com raio r1. */
     fun cyl(cx: Float, y0: Float, cz: Float, r0: Float, r1: Float, h: Float, col: Int, seg0: Int = 8, a: Float = 1f, lit: Boolean = true) {
-        val seg = if (lod && seg0 > 16) 16 else seg0
+        val sg = if (lod && seg0 > 16) 16 else seg0
+        val seg = if (sg <= 6) sg else max(6, (sg * dq).toInt())
         setCol(col, a)
         val y1 = y0 + h
         val slope = (r0 - r1) / (if (h == 0f) 1f else h)
@@ -193,8 +198,10 @@ class Batch {
 
     /** Elipsoide centrado em (cx,cy,cz) com raios (rx,ry,rz). */
     fun sphere(cx: Float, cy: Float, cz: Float, rx: Float, ry: Float, rz: Float, col: Int, a: Float = 1f, lit: Boolean = true, sl0: Int = 8, st0: Int = 5) {
-        val sl = if (lod && sl0 > 16) 16 else sl0
-        val st = if (lod && st0 > 10) 10 else st0
+        val sl1 = if (lod && sl0 > 16) 16 else sl0
+        val st1 = if (lod && st0 > 10) 10 else st0
+        val sl = if (sl1 <= 5) sl1 else max(5, (sl1 * dq).toInt())
+        val st = if (st1 <= 3) st1 else max(3, (st1 * dq).toInt())
         setCol(col, a)
         for (i in 0 until st) {
             val p0 = (-PI / 2.0 + PI * i / st).toFloat()
@@ -321,6 +328,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
     private var uFog = 0
     private var uCam = 0
     private var uOut = 0
+    private var uDet = 0
     private var aP = 0
     private var aN = 0
     private var aC = 0
@@ -337,8 +345,10 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         attribute vec4 aC;
         varying vec4 vC;
         varying float vFog;
+        varying vec3 vW;
         void main() {
             float l = length(aN);
+            vW = aP;
             vec3 pos = aP;
             vec3 col = aC.rgb;
             if (uOut > 0.0) {
@@ -389,6 +399,56 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         }
     """.trimIndent()
 
+    /** Fragment shader com textura procedural (neve, pedra, gelo) usada só no cenário estático. */
+    private val FS_DETAIL = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
+        precision mediump float;
+        #endif
+        uniform vec3 uFog;
+        uniform float uDet;
+        varying vec4 vC;
+        varying float vFog;
+        varying vec3 vW;
+        float h21(vec2 p) {
+            vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+        }
+        float vn(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            float a = h21(i);
+            float b = h21(i + vec2(1.0, 0.0));
+            float c = h21(i + vec2(0.0, 1.0));
+            float d = h21(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+        void main() {
+            vec3 c = vC.rgb;
+            if (uDet > 0.5) {
+                vec2 q = vW.xz + vW.y * vec2(0.6, 0.35);
+                float n1 = vn(q * 0.11);
+                float n2 = vn(q * 0.45 + 17.0);
+                float n3 = vn(q * 1.7 + 5.0);
+                float m = (n1 - 0.5) * 0.15 + (n2 - 0.5) * 0.12 + (n3 - 0.5) * 0.07;
+                c *= 1.0 + m;
+                float l0 = dot(c, vec3(0.299, 0.587, 0.114));
+                float sp = step(0.93, h21(floor(q * 3.1))) * smoothstep(0.62, 0.9, l0);
+                c += vec3(0.10, 0.12, 0.16) * sp * (0.5 + 0.5 * n3);
+                float ice = smoothstep(0.62, 0.8, n1) * smoothstep(0.55, 0.85, l0);
+                c = mix(c, c * vec3(0.90, 0.97, 1.08), ice * 0.5);
+            }
+            c = mix(c, uFog, vFog);
+            float lum = dot(c, vec3(0.299, 0.587, 0.114));
+            c = mix(vec3(lum), c, 1.18);
+            c = (c - 0.5) * 1.06 + 0.5;
+            gl_FragColor = vec4(c, vC.a);
+        }
+    """.trimIndent()
+
     private fun shader(type: Int, src: String): Int {
         val s = GLES20.glCreateShader(type)
         GLES20.glShaderSource(s, src)
@@ -405,7 +465,11 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         val vs = shader(GLES20.GL_VERTEX_SHADER, VS)
-        val fs = shader(GLES20.GL_FRAGMENT_SHADER, FS)
+        val fs = try {
+            shader(GLES20.GL_FRAGMENT_SHADER, FS_DETAIL)
+        } catch (e: RuntimeException) {
+            shader(GLES20.GL_FRAGMENT_SHADER, FS)
+        }
         prog = GLES20.glCreateProgram()
         GLES20.glAttachShader(prog, vs)
         GLES20.glAttachShader(prog, fs)
@@ -414,6 +478,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         uFog = GLES20.glGetUniformLocation(prog, "uFog")
         uCam = GLES20.glGetUniformLocation(prog, "uCam")
         uOut = GLES20.glGetUniformLocation(prog, "uOut")
+        uDet = GLES20.glGetUniformLocation(prog, "uDet")
         aP = GLES20.glGetAttribLocation(prog, "aP")
         aN = GLES20.glGetAttribLocation(prog, "aN")
         aC = GLES20.glGetAttribLocation(prog, "aC")
@@ -452,12 +517,14 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         val cx = g.camX
         GLES20.glDepthMask(true)
         GLES20.glDisable(GLES20.GL_BLEND)
+        GLES20.glUniform1f(uDet, 1f)
         for (s in statics) {
-            if (s.x1 < cx - 3400f || s.x0 > cx + 3400f) continue
+            if (s.x1 < cx - 3000f || s.x0 > cx + 3000f) continue
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, s.vbo)
             attribs()
             GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, s.count)
         }
+        GLES20.glUniform1f(uDet, 0f)
         if (b.opq.n > 0) {
             upload(b.opq)
             GLES20.glUniform1f(uOut, 1.9f)

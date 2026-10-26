@@ -294,7 +294,7 @@ class StaticMesh(val vbo: Int, val count: Int, val x0: Float, val x1: Float)
 /** Escolhe a melhor configuração EGL: MSAA e profundidade 24 se existirem. */
 class MsaaChooser : GLSurfaceView.EGLConfigChooser {
     override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
-        for (samples in intArrayOf(2, 0)) {
+        for (samples in intArrayOf(0)) {
             for (depth in intArrayOf(24, 16)) {
                 val spec = if (samples > 0) intArrayOf(
                     EGL10.EGL_RED_SIZE, 8, EGL10.EGL_GREEN_SIZE, 8, EGL10.EGL_BLUE_SIZE, 8,
@@ -365,7 +365,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 gl_Position = uVP * vec4(pos, 1.0);
                 gl_Position.z += gl_Position.w * 0.004;
                 vC = vec4(col * 0.22 + vec3(0.01, 0.015, 0.04), aC.a);
-                vFog = clamp((gl_Position.w - 1900.0) / 3200.0, 0.0, 1.0);
+                vFog = clamp((gl_Position.w - 2700.0) / 3600.0, 0.0, 1.0);
                 return;
             }
             gl_Position = uVP * vec4(pos, 1.0);
@@ -383,7 +383,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 col = col * lc + spec * vec3(1.0, 0.96, 0.86);
             }
             vC = vec4(col, aC.a);
-            vFog = clamp((gl_Position.w - 1900.0) / 3200.0, 0.0, 1.0);
+            vFog = clamp((gl_Position.w - 2700.0) / 3600.0, 0.0, 1.0);
         }
     """.trimIndent()
 
@@ -518,6 +518,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
             GLES20.glUniform3f(uFog, SKY_R, SKY_G, SKY_B)
             GLES20.glUniform3f(uCam, g.camPos[0], g.camPos[1], g.camPos[2])
             GLES20.glUniform1f(uOut, 0f)
+            g.stepFrame()
             g.scene.frame()
         }
         val cx = g.camX
@@ -525,7 +526,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         GLES20.glDisable(GLES20.GL_BLEND)
         GLES20.glUniform1f(uDet, 1f)
         for (s in statics) {
-            if (s.x1 < cx - 3000f || s.x0 > cx + 3000f) continue
+            if (s.x1 < cx - 2700f || s.x0 > cx + 2700f) continue
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, s.vbo)
             attribs()
             GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, s.count)

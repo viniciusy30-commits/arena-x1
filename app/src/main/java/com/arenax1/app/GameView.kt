@@ -90,6 +90,8 @@ private fun rgb(r: Int, g: Int, b: Int): Int =
 
 // ------------------------------------------------------------------- O JOGO
 
+const val GAME_SPEED = 0.62f
+
 class GameView(ctx: Context) : FrameLayout(ctx) {
 
     internal val W = MAP_W
@@ -164,11 +166,11 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         minions.clear(); towers.clear(); projs.clear(); zones.clear()
         beams.clear(); texts.clear(); parts.clear(); deadFx.clear()
         towers.add(Tower(380f, CY, 0, true))
-        towers.add(Tower(1450f, CY, 0, false))
-        towers.add(Tower(2850f, CY, 0, false))
+        towers.add(Tower(1900f, CY, 0, false))
+        towers.add(Tower(3800f, CY, 0, false))
         towers.add(Tower(W - 380f, CY, 1, true))
-        towers.add(Tower(W - 1450f, CY, 1, false))
-        towers.add(Tower(W - 2850f, CY, 1, false))
+        towers.add(Tower(W - 1900f, CY, 1, false))
+        towers.add(Tower(W - 3800f, CY, 1, false))
         pl = Champ(540f, CY, 0, true)
         bot = Champ(W - 540f, CY, 1, false)
         pl.mana = pl.maxMana
@@ -181,6 +183,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         super.onSizeChanged(w, h, ow, oh)
+        if (w > 0 && h > 0) glv.holder.setFixedSize((w * 0.75f).toInt(), (h * 0.75f).toInt())
         val wf = w.toFloat()
         val hf = h.toFloat()
         bx[4] = wf - 90f * d; by[4] = hf - 85f * d; br[4] = 46f * d
@@ -491,13 +494,13 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         c.mana -= COST[s]
         c.cd[s] = CDS[s]
         c.face = ang
-        c.castT = 0.45f
+        c.castT = 0.8f
         val ap = c.ap
         val cs = cos(ang)
         val sn = sin(ang)
         when (s) {
             0 -> {
-                projs.add(Proj(c.x, c.y - 10f, cs * 1300f, sn * 1300f, c.team, 55f + ap * 0.55f + c.level * 6f,
+                projs.add(Proj(c.x, c.y - 10f, cs * 1050f, sn * 1050f, c.team, 55f + ap * 0.55f + c.level * 6f,
                     950f, 26f, 1, c, 1.6f, null))
                 burst(c.x + cs * 30f, c.y + sn * 30f, C(0xFFFFF59D), 8)
             }
@@ -747,7 +750,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
 
     internal fun updateCam() {
-        camX = pl.x.coerceIn(1000f, W - 1000f)
+        camX = pl.x.coerceIn(1300f, W - 1300f)
         var sx = 0f
         var sz = 0f
         if (shake > 0f) {
@@ -756,10 +759,10 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         }
         val aspect = if (height > 0) width.toFloat() / height.toFloat() else 2f
         Matrix.perspectiveM(projM, 0, 45f, aspect, 150f, 7000f)
-        camPos[0] = camX + sx; camPos[1] = 900f; camPos[2] = CY + 620f + sz
-        Matrix.setLookAtM(viewM, 0, camX + sx, 900f, CY + 620f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
+        camPos[0] = camX + sx; camPos[1] = 1200f; camPos[2] = CY + 820f + sz
+        Matrix.setLookAtM(viewM, 0, camX + sx, 1200f, CY + 820f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
         Matrix.multiplyMM(vp, 0, projM, 0, viewM, 0)
-        viewW = 930f * aspect
+        viewW = 1230f * aspect
     }
 
     private val viewM = FloatArray(16)
@@ -826,15 +829,22 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         }
     }
 
+    private var dtS = 0.016f
+
+    /** Chamado uma vez por quadro pela thread do GL (dentro do lock): avança o jogo em câmera lenta suave. */
+    internal fun stepFrame() {
+        val now = System.nanoTime()
+        var dt = if (last == 0L) 0.016f else (now - last) / 1e9f
+        last = now
+        if (dt > 0.05f) dt = 0.05f
+        dtS = dtS * 0.6f + dt * 0.4f
+        update(dtS * GAME_SPEED)
+    }
+
     /** Camada transparente por cima do 3D: atualiza o jogo e desenha o HUD. */
     inner class HudView(ctx: Context) : View(ctx) {
         override fun onDraw(c: Canvas) {
-            val now = System.nanoTime()
-            var dt = if (last == 0L) 0.016f else (now - last) / 1e9f
-            last = now
-            if (dt > 0.05f) dt = 0.05f
             synchronized(lock) {
-                update(dt)
                 drawWorldUi(c)
                 drawHud(c, width.toFloat(), height.toFloat(), viewW)
             }

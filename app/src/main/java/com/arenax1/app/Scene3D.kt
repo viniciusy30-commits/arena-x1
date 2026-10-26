@@ -34,7 +34,7 @@ fun vnoise(x: Float, z: Float): Float {
     return top + (bot - top) * sz
 }
 
-const val MAP_W = 7200f
+const val MAP_W = 9600f
 
 /** Sem moitas nesta arena: a vegetação é só decoração de borda. (Lista mantida vazia para o esconderijo poder voltar.) */
 val BRUSHES: List<FloatArray> = emptyList()
@@ -361,7 +361,7 @@ class Scene(private val g: GameView) {
 
         // ---- abismo: espirais de rocha com topo nevado
         run {
-            for (i in 0 until 170) {
+            for (i in 0 until 230) {
                 val x = -300f + hash2(i, 401) * (MAP_W + 600f)
                 val side = if (hash2(i, 402) < 0.5f) -1 else 1
                 val z = 640f + side * (laneHalf(x) + 70f + hash2(i, 403) * 320f)
@@ -378,7 +378,7 @@ class Scene(private val g: GameView) {
 
         // ---- plataformas antigas em ruínas, com pinheiros congelados, arbustos e musgo
         run {
-            for (i in 0 until 26) {
+            for (i in 0 until 34) {
                 val x = 150f + hash2(i, 421) * (MAP_W - 300f)
                 val side = if (i % 2 == 0) -1 else 1
                 val z = 640f + side * (laneHalf(x) + 120f + hash2(i, 422) * 150f)
@@ -402,7 +402,7 @@ class Scene(private val g: GameView) {
         // ---- montanhas distantes em camadas, cada vez mais claras e azuladas
         run {
             for (layer in 0 until 3) {
-                for (i in 0 until 40) {
+                for (i in 0 until 52) {
                     val x = -600f + i * 205f + hash2(i, 440 + layer) * 90f
                     val z = -380f - layer * 320f - hash2(i, 450 + layer) * 120f
                     val h = 520f + layer * 220f + hash2(i, 460 + layer) * 340f
@@ -572,26 +572,26 @@ class Scene(private val g: GameView) {
             fpx += 540f
         }
         for (tw in g.towers) {
-            if (abs(tw.x - cx) > 2700f) continue
+            if (abs(tw.x - cx) > 3000f) continue
             if (tw.dead) rubble(tw) else tower(tw)
         }
         for (m in g.minions) {
             if (m.dead || abs(m.x - cx) > 2500f || g.hiddenFor(m, 0)) continue
             place(m)
             fl = m.flash > 0f
-            b.sc(1.7f, 1.7f, 1.7f)
+            b.sc(1.2f, 1.2f, 1.2f)
             minion(m)
             b.pop()
-            shadow(m.x, m.y, 22f)
+            shadow(m.x, m.y, 16f)
         }
         for (c in g.champs) {
             if (c.dead || abs(c.x - cx) > 2500f || g.hiddenFor(c, 0)) continue
             place(c)
             fl = c.flash > 0f
-            b.sc(1.9f, 1.9f, 1.9f)
+            b.sc(1.35f, 1.35f, 1.35f)
             lux(c)
             b.pop()
-            shadow(c.x, c.y, 32f)
+            shadow(c.x, c.y, 24f)
             teamRing(c)
         }
         fl = false
@@ -603,7 +603,7 @@ class Scene(private val g: GameView) {
             b.rotZ(-k * 88f)
             val s = 1f - k * 0.55f
             b.sc(s, s, s)
-            if (u is Champ) { b.sc(1.9f, 1.9f, 1.9f); lux(u) } else if (u is Minion) { b.sc(1.7f, 1.7f, 1.7f); minion(u) }
+            if (u is Champ) { b.sc(1.35f, 1.35f, 1.35f); lux(u) } else if (u is Minion) { b.sc(1.2f, 1.2f, 1.2f); minion(u) }
             b.pop()
         }
         for (z in g.zones) zone(z)
@@ -644,8 +644,8 @@ class Scene(private val g: GameView) {
         val col = if (c.team == 0) cc(0xFF4FC3F7) else cc(0xFFFF5252)
         val gy = groundH(c.x, c.y) + 1.1f
         b.mode = 2
-        b.ring(c.x, gy, c.y, 34f, 39f, col, 0.85f, false, 28)
-        if (c.rootT > 0f) b.ring(c.x, gy + 0.2f, c.y, 44f, 50f, cc(0xFFFFF176), 0.95f, false, 28)
+        b.ring(c.x, gy, c.y, 26f, 30f, col, 0.85f, false, 28)
+        if (c.rootT > 0f) b.ring(c.x, gy + 0.2f, c.y, 34f, 38f, cc(0xFFFFF176), 0.95f, false, 28)
         b.mode = 0
     }
 
@@ -689,7 +689,8 @@ class Scene(private val g: GameView) {
         val ph = c.walk * 1.1f
         val sw = sin(ph) * amp
         val bob = abs(sin(ph)) * 2.0f * amp + sin(t * 2f) * 0.6f
-        val ck = (c.castT / 0.45f).coerceIn(0f, 1f)
+        val ck0 = (c.castT / 0.8f).coerceIn(0f, 1f)
+        val ck = ck0 * ck0 * (3f - 2f * ck0)
         val ak = ((c.atkCd - 0.45f) / 0.25f).coerceIn(0f, 1f)
         val act = max(ck, ak)
 

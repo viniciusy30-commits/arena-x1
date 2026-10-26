@@ -1,6 +1,5 @@
-#id 2026-10-26-d
-#titulo Visual estilo MOBA mobile
-- Contorno nos personagens e torres, luz de borda e brilho nos modelos
-- Lux remodelada: rosto com olhos grandes, franja, tranças em corrente, asas, botas, ombreiras e cajado com cristal
-- Lane com lajotas, meio-fio dourado e linha de energia; capim, arbustos, cristais e montanhas ao fundo
-- Torres com ameias, pilares e runas; minions mais detalhados
+#id 2026-10-26-g
+#titulo Yasuo andando (teste de sprites)
+- Seu campeão agora aparece como o sprite do Yasuo, com 8 direções
+- Animação de caminhada quando você anda e pose parada quando para
+- O bot continua sendo a Lux

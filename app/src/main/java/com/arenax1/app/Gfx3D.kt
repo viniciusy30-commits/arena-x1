@@ -1,6 +1,8 @@
 package com.arenax1.app
 
+import android.graphics.BitmapFactory
 import android.opengl.GLES20
+import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import java.nio.ByteBuffer
@@ -336,6 +338,105 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
     private var fb: FloatBuffer = ByteBuffer.allocateDirect(4 * 10 * 6000).order(ByteOrder.nativeOrder()).asFloatBuffer()
     private val statics = ArrayList<StaticMesh>()
 
+    // ---- sprites 2D (Yasuo)
+    private var sprProg = 0
+    private var sprTex = 0
+    private var sUVP = 0
+    private var sTex = 0
+    private var sP = 0
+    private var sT = 0
+    private var sF = 0
+    private var sprBuf: FloatBuffer = ByteBuffer.allocateDirect(4 * 6 * 600).order(ByteOrder.nativeOrder()).asFloatBuffer()
+    private val SPR_VS = """
+        uniform mat4 uVP;
+        attribute vec3 aP;
+        attribute vec2 aT;
+        attribute float aF;
+        varying vec2 vT;
+        varying float vF;
+        void main() {
+            gl_Position = uVP * vec4(aP, 1.0);
+            vT = aT;
+            vF = aF;
+        }
+    """.trimIndent()
+    private val SPR_FS = """
+        precision mediump float;
+        uniform sampler2D uTex;
+        varying vec2 vT;
+        varying float vF;
+        void main() {
+            vec4 c = texture2D(uTex, vT);
+            if (c.a < 0.5) discard;
+            vec3 rgb = mix(c.rgb, vec3(1.0), vF * 0.6);
+            gl_FragColor = vec4(rgb, 1.0);
+        }
+    """.trimIndent()
+
+    private fun initSprites() {
+        try {
+            sprProg = GLES20.glCreateProgram()
+            GLES20.glAttachShader(sprProg, shader(GLES20.GL_VERTEX_SHADER, SPR_VS))
+            GLES20.glAttachShader(sprProg, shader(GLES20.GL_FRAGMENT_SHADER, SPR_FS))
+            GLES20.glLinkProgram(sprProg)
+            sUVP = GLES20.glGetUniformLocation(sprProg, "uVP")
+            sTex = GLES20.glGetUniformLocation(sprProg, "uTex")
+            sP = GLES20.glGetAttribLocation(sprProg, "aP")
+            sT = GLES20.glGetAttribLocation(sprProg, "aT")
+            sF = GLES20.glGetAttribLocation(sprProg, "aF")
+            val opt = BitmapFactory.Options()
+            opt.inScaled = false
+            opt.inPremultiplied = false
+            val bmp = g.context.assets.open("yasuo_atlas.png").use { BitmapFactory.decodeStream(it, null, opt) }
+            val ids = IntArray(1)
+            GLES20.glGenTextures(1, ids, 0)
+            sprTex = ids[0]
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sprTex)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
+            bmp?.recycle()
+        } catch (e: Exception) {
+            sprTex = 0
+        }
+    }
+
+    private fun drawSprites() {
+        val sp = g.scene.sprites
+        if (sprTex == 0 || sp.isEmpty()) return
+        if (sprBuf.capacity() < sp.size) {
+            sprBuf = ByteBuffer.allocateDirect(4 * (sp.size + 600)).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        }
+        sprBuf.clear()
+        for (f in sp) sprBuf.put(f)
+        sprBuf.position(0)
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
+        GLES20.glUseProgram(sprProg)
+        GLES20.glUniformMatrix4fv(sUVP, 1, false, g.vp, 0)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sprTex)
+        GLES20.glUniform1i(sTex, 0)
+        GLES20.glEnableVertexAttribArray(sP)
+        GLES20.glEnableVertexAttribArray(sT)
+        GLES20.glEnableVertexAttribArray(sF)
+        sprBuf.position(0)
+        GLES20.glVertexAttribPointer(sP, 3, GLES20.GL_FLOAT, false, 24, sprBuf)
+        sprBuf.position(3)
+        GLES20.glVertexAttribPointer(sT, 2, GLES20.GL_FLOAT, false, 24, sprBuf)
+        sprBuf.position(5)
+        GLES20.glVertexAttribPointer(sF, 1, GLES20.GL_FLOAT, false, 24, sprBuf)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, sp.size / 6)
+        GLES20.glDisableVertexAttribArray(sP)
+        GLES20.glDisableVertexAttribArray(sT)
+        GLES20.glDisableVertexAttribArray(sF)
+        GLES20.glUseProgram(prog)
+        GLES20.glEnableVertexAttribArray(aP)
+        GLES20.glEnableVertexAttribArray(aN)
+        GLES20.glEnableVertexAttribArray(aC)
+    }
+
     private val VS = """
         uniform mat4 uVP;
         uniform vec3 uCam;
@@ -449,8 +550,9 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
             c *= mix(1.0, ex, vLit);
             c = mix(c, uFog, vFog);
             float lum = dot(c, vec3(0.299, 0.587, 0.114));
-            c = mix(vec3(lum), c, 1.22);
-            c = (c - 0.5) * 1.10 + 0.5;
+            c = mix(vec3(lum), c, 1.34);
+            c = (c - 0.5) * 1.12 + 0.5;
+            c *= vec3(1.04, 1.0, 0.97);
             gl_FragColor = vec4(c, vC.a);
         }
     """.trimIndent()
@@ -495,6 +597,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glDepthFunc(GLES20.GL_LEQUAL)
         GLES20.glClearColor(SKY_R, SKY_G, SKY_B, 1f)
+        initSprites()
         statics.clear()
         synchronized(g.lock) {
             g.scene.buildStatic(this)
@@ -539,6 +642,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
             GLES20.glUniform1f(uOut, 0f)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, b.opq.n / 10)
         }
+        drawSprites()
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glDepthMask(false)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)

@@ -36,6 +36,8 @@ open class U(var x: Float, var y: Float, val team: Int, var maxHp: Float, val r:
     var walk = 0f
     var mv = 0f
     var castT = 0f
+    var castS = 0
+    var castMax = 0.8f
 }
 
 class Minion(x: Float, y: Float, team: Int, val caster: Boolean) :
@@ -50,6 +52,7 @@ class Champ(x: Float, y: Float, team: Int, val player: Boolean) : U(x, y, team, 
     var gold = 0f
     var mana = 440f
     val cd = FloatArray(4)
+    var sprite = false
     var respawn = 0f
     var kills = 0
     var deaths = 0
@@ -70,7 +73,7 @@ class Proj(
 class Zone(val x: Float, val y: Float, val r: Float, var life: Float, val owner: Champ, val dmg: Float)
 class Beam(var x: Float, var y: Float, val ang: Float, var delay: Float, val owner: Champ, val dmg: Float) {
     var fired = false
-    var life = 0.45f
+    var life = 0.7f
 }
 
 class FT(val x: Float, var y: Float, val s: String, var life: Float, val col: Int) {
@@ -172,6 +175,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         towers.add(Tower(W - 1900f, CY, 1, false))
         towers.add(Tower(W - 3800f, CY, 1, false))
         pl = Champ(540f, CY, 0, true)
+        pl.sprite = true
         bot = Champ(W - 540f, CY, 1, false)
         pl.mana = pl.maxMana
         bot.mana = bot.maxMana
@@ -494,7 +498,9 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         c.mana -= COST[s]
         c.cd[s] = CDS[s]
         c.face = ang
-        c.castT = 0.8f
+        c.castS = s
+        c.castMax = when (s) { 3 -> 1.15f; 2 -> 0.9f; else -> 0.8f }
+        c.castT = c.castMax
         val ap = c.ap
         val cs = cos(ang)
         val sn = sin(ang)

@@ -362,6 +362,19 @@ class Scene(private val g: GameView) {
             crystals(bt, wx + dir * 120f, 640f + 270f, 1.6f, glow, team * 7 + 2)
         }
 
+        // ---- cristais brilhantes ao longo da ponte, na cor de cada lado
+        run {
+            var cxp = 700f
+            var ci = 0
+            while (cxp < MAP_W - 700f) {
+                val sd = if (ci % 2 == 0) -1 else 1
+                val gcol = if (cxp < midX) cyanG else redG
+                crystals(bt, cxp, 640f + sd * (laneHalf(cxp) + 55f), 1.15f + hash2(ci, 811) * 0.5f, gcol, 900 + ci)
+                cxp += 480f + hash2(ci, 812) * 160f
+                ci++
+            }
+        }
+
         // ---- abismo: espirais de rocha com topo nevado
         run {
             for (i in 0 until 95) {
@@ -507,6 +520,7 @@ class Scene(private val g: GameView) {
 
     fun frame(): Batch {
         b.clear()
+        sprites.clear()
         t = g.t
         val cx = g.camX
         fl = false
@@ -545,6 +559,23 @@ class Scene(private val g: GameView) {
             val pu = 0.5f + 0.5f * sin(t * 2.2f + team * 1.7f)
             b.ring(ncx, 5.9f, 640f, 120f + pu * 26f, 130f + pu * 26f, gl, 0.25f + 0.35f * (1f - pu), false, 40)
             b.disc(ncx, 5.8f, 640f, 112f, gl, 0.10f + 0.08f * pu, false, 32)
+        }
+        // pulsos de energia correndo pela linha central da ponte
+        for (i in 0 until 8) {
+            val px = ((i * 1200f + t * 340f) % MAP_W)
+            if (abs(px - cx) > 1900f) continue
+            val pc = if (px < MAP_W / 2f) cc(0xFF4FC3F7) else cc(0xFFFF6E5C)
+            val py = groundH(px, 640f) + 2.2f
+            b.box(px, py, 640f, 70f, 0.8f, 7f, pc, 0.55f, false)
+            b.box(px, py + 0.1f, 640f, 26f, 0.8f, 3f, white, 0.8f, false)
+        }
+        // faíscas de gelo subindo do abismo
+        for (i in 0 until 50) {
+            val fx = cx - 1400f + (((i * 0.618034f) % 1f) * 2800f + t * 18f) % 2800f
+            val side = if (i % 2 == 0) -1 else 1
+            val fz = 640f + side * (laneHalf(fx) + 30f + ((i * 0.381966f) % 1f) * 260f)
+            val fy = -160f + ((t * (26f + (i % 5) * 7f) + i * 47f) % 420f)
+            b.box(fx, fy, fz, 3f, 3f, 3f, cc(0xFFBFE6FF), 0.55f * (1f - (fy + 160f) / 420f), false)
         }
         // neve soprada em rajadas
         val gust = 60f + 110f * (0.5f + 0.5f * sin(t * 0.27f))
@@ -586,16 +617,22 @@ class Scene(private val g: GameView) {
             minion(m)
             b.pop()
             shadow(m.x, m.y, 16f)
+            if (m.rootT > 0f) bindFx(m)
         }
         for (c in g.champs) {
             if (c.dead || abs(c.x - cx) > 2500f || g.hiddenFor(c, 0)) continue
             place(c)
             fl = c.flash > 0f
-            b.sc(1.35f, 1.35f, 1.35f)
-            lux(c)
+            if (c.sprite) {
+                addSprite(c)
+            } else {
+                b.sc(1.35f, 1.35f, 1.35f)
+                lux(c)
+            }
             b.pop()
             shadow(c.x, c.y, 24f)
             teamRing(c)
+            if (c.rootT > 0f) bindFx(c)
         }
         fl = false
         for (f in g.deadFx) {
@@ -606,7 +643,7 @@ class Scene(private val g: GameView) {
             b.rotZ(-k * 88f)
             val s = 1f - k * 0.55f
             b.sc(s, s, s)
-            if (u is Champ) { b.sc(1.35f, 1.35f, 1.35f); lux(u) } else if (u is Minion) { b.sc(1.2f, 1.2f, 1.2f); minion(u) }
+            if (u is Champ) { if (!u.sprite) { b.sc(1.35f, 1.35f, 1.35f); lux(u) } } else if (u is Minion) { b.sc(1.2f, 1.2f, 1.2f); minion(u) }
             b.pop()
         }
         for (z in g.zones) zone(z)
@@ -629,6 +666,34 @@ class Scene(private val g: GameView) {
         }
     }
 
+    /** Sprites 2D (Yasuo): quads inclinados para a câmera, 8 direções, 6 quadros de caminhada. */
+    val sprites = ArrayList<Float>()
+
+    private fun addSprite(c: Champ) {
+        val ang = c.face
+        val idx = (((Math.round(ang / (Math.PI / 4.0)).toInt()) % 8) + 8) % 8
+        val moving = c.mv > 0f
+        val row = if (moving) (c.walk * 0.6f).toInt() % 6 else 6
+        val u0 = idx / 8f
+        val u1 = (idx + 1) / 8f
+        val v0 = row / 7f
+        val v1 = (row + 1) / 7f
+        val k = 2.5f
+        val hw = 48f * k
+        val gy = groundH(c.x, c.y)
+        val uy = 0.93f
+        val uz = -0.37f
+        val bot = -21f * k
+        val top = 75f * k
+        val fv = if (c.flash > 0f) 1f else 0f
+        fun v(sx: Float, h: Float, tu: Float, tv: Float) {
+            sprites.add(c.x + sx); sprites.add(gy + uy * h + 2f); sprites.add(c.y + uz * h)
+            sprites.add(tu); sprites.add(tv); sprites.add(fv)
+        }
+        v(-hw, bot, u0, v1); v(hw, bot, u1, v1); v(hw, top, u1, v0)
+        v(-hw, bot, u0, v1); v(hw, top, u1, v0); v(-hw, top, u0, v0)
+    }
+
     private fun place(u: U) {
         b.push()
         b.tr(u.x, groundH(u.x, u.y), u.y)
@@ -641,6 +706,30 @@ class Scene(private val g: GameView) {
         b.disc(x, gy, y, r, bk, 0.13f, false, 16)
         b.disc(x, gy + 0.05f, y, r * 0.76f, bk, 0.13f, false, 16)
         b.disc(x, gy + 0.1f, y, r * 0.5f, bk, 0.16f, false, 14)
+    }
+
+    /** Prisão de luz (Q da Lux): anéis dourados girando e fagulhas em volta do alvo. */
+    private fun bindFx(u: U) {
+        val gy = groundH(u.x, u.y)
+        val k = (u.rootT / 1.6f).coerceIn(0f, 1f)
+        val gl = cc(0xFFFFF59D)
+        b.mode = 2
+        for (i in 0 until 3) {
+            val yy = gy + 12f + i * 24f + sin(t * 5f + i) * 3f
+            b.push()
+            b.tr(u.x, yy, u.y)
+            b.rotY(t * (150f + i * 60f) * (if (i % 2 == 0) 1f else -1f))
+            b.ring(0f, 0f, 0f, 27f - i * 2f, 31f - i * 2f, gl, 0.25f + 0.6f * k, false, 22)
+            for (j in 0 until 4) {
+                b.push()
+                b.rotY(j * 90f)
+                b.box(29f, 0f, 0f, 7f, 3.4f, 3.4f, white, 0.95f, false)
+                b.pop()
+            }
+            b.pop()
+        }
+        b.sphere(u.x, gy + 34f, u.y, 30f, 42f, 30f, gl, 0.08f + 0.1f * k, false, 10, 7)
+        b.mode = 0
     }
 
     private fun teamRing(c: Champ) {
@@ -692,10 +781,34 @@ class Scene(private val g: GameView) {
         val ph = c.walk * 1.1f
         val sw = sin(ph) * amp
         val bob = abs(sin(ph)) * 2.0f * amp + sin(t * 2f) * 0.6f
-        val ck0 = (c.castT / 0.8f).coerceIn(0f, 1f)
+        val ck0 = (c.castT / c.castMax).coerceIn(0f, 1f)
         val ck = ck0 * ck0 * (3f - 2f * ck0)
         val ak = ((c.atkCd - 0.45f) / 0.25f).coerceIn(0f, 1f)
-        val act = max(ck, ak)
+        val casting = c.castT > 0f
+        val cp = if (casting) (1f - c.castT / c.castMax).coerceIn(0f, 1f) else 1f
+        fun sm(x: Float): Float { val q = x.coerceIn(0f, 1f); return q * q * (3f - 2f * q) }
+        val cin = sm(cp / 0.22f)
+        val cout = 1f - sm((cp - 0.8f) / 0.2f)
+        val hold = cin * cout
+        val act = if (casting && c.castS == 3) max(ak, 0.35f + 0.65f * sm(cp / 0.5f) * cout) else max(ck, ak)
+        // pose do braço do cajado por skill (Q estocada, W erguer, E arremesso, R carga e disparo)
+        var pArm = act * 74f
+        var pElb = act * 14f
+        var pStf = -56f * act
+        if (casting) {
+            when (c.castS) {
+                0 -> { val th = sm((cp - 0.12f) / 0.2f) * cout; pArm = 84f * th; pElb = 8f * th; pStf = -78f * th }
+                1 -> { pArm = 150f * hold; pElb = 6f * hold; pStf = 10f * hold }
+                2 -> { val th = sm((cp - 0.3f) / 0.16f) * cout; pArm = 125f * hold; pElb = 10f * hold; pStf = 6f * hold - 74f * th }
+                else -> {
+                    val rs = sm(cp / 0.45f)
+                    val sl = sm((cp - 0.5f) / 0.1f)
+                    pArm = (150f * rs - 66f * sl) * cout
+                    pElb = 8f * rs * cout
+                    pStf = (14f * rs - 70f * sl) * cout
+                }
+            }
+        }
 
         // aura e sigilo de conjuração no chão
         b.mode = 2
@@ -710,6 +823,11 @@ class Scene(private val g: GameView) {
                 b.box(sr * 0.5f, 1.4f, 0f, sr * 0.85f, 0.4f, 2.0f, glow, 0.4f * act, false)
                 b.pop()
             }
+        }
+        if (casting && c.castS == 1) {
+            val wr = 30f + 190f * cp
+            b.ring(0f, 1.5f, 0f, wr, wr + 5f, white, 0.8f * (1f - cp), false, 40)
+            b.ring(0f, 1.6f, 0f, wr * 0.7f, wr * 0.7f + 3f, glow, 0.6f * (1f - cp), false, 36)
         }
         b.mode = 0
 
@@ -907,9 +1025,9 @@ class Scene(private val g: GameView) {
 
         // ---------------- braço do cajado + cajado
         run {
-            val armA = 10f + sw * 16f + act * 74f
-            val elbow = -(12f + act * 14f)
-            val staffW = -14f - 56f * act
+            val armA = 10f + sw * 16f + pArm
+            val elbow = -(12f + pElb)
+            val staffW = -14f + pStf
             b.push()
             b.tr(0f, 46.4f, 9.4f)
             b.rotZ(armA)
@@ -1409,10 +1527,27 @@ class Scene(private val g: GameView) {
 
     private fun zone(z: Zone) {
         val gy = groundH(z.x, z.y) + 1.4f
-        val pulse = 1f + 0.03f * sin(t * 8f)
-        val rr = z.r * pulse
+        val el = 4f - z.life
+        val landRaw = (el / 0.4f).coerceIn(0f, 1f)
+        val land = landRaw * landRaw * (3f - 2f * landRaw)
+        val det = (1f - z.life / 0.35f).coerceIn(0f, 1f)
+        val pulse = 1f + 0.03f * sin(t * (8f + 22f * det))
+        val rr = z.r * pulse * (0.15f + 0.85f * land)
         val gold = cc(0xFFFFF0A0)
         b.mode = 2
+        if (landRaw < 1f) {
+            val fy = gy + 28f + (1f - landRaw) * (1f - landRaw) * 360f
+            b.cyl(z.x, fy, z.y, 6f, 14f, 150f, gold, 8, 0.25f * (1f - landRaw), false)
+            b.sphere(z.x, fy, z.y, 22f, 22f, 22f, white, 0.9f, false, 8, 6)
+        }
+        if (el in 0.4f..0.9f) {
+            val sk = (el - 0.4f) / 0.5f
+            b.ring(z.x, gy + 0.6f, z.y, z.r * sk, z.r * sk + 6f, white, 0.8f * (1f - sk), false, 44)
+        }
+        if (det > 0f) {
+            b.ring(z.x, gy + 0.7f, z.y, rr * (0.5f + 0.7f * det), rr * (0.5f + 0.7f * det) + 8f, white, 0.9f * det, false, 44)
+            b.cyl(z.x, gy, z.y, rr * 0.5f, rr * 0.2f, 420f * det, gold, 12, 0.35f * det, false)
+        }
         // piso em gradiente de luz
         b.disc(z.x, gy, z.y, rr, gold, 0.10f, false, 36)
         b.disc(z.x, gy + 0.05f, z.y, rr * 0.8f, gold, 0.10f, false, 32)
@@ -1451,7 +1586,7 @@ class Scene(private val g: GameView) {
         }
         // coluna e orbe de luz central
         b.cyl(z.x, gy, z.y, 18f, 8f, 160f, gold, 10, 0.15f, false)
-        val oy = gy + 28f + sin(t * 3f) * 4f
+        val oy = gy + 28f + sin(t * 3f) * 4f + (1f - land) * (1f - land) * 360f
         b.sphere(z.x, oy, z.y, 36f * pulse, 36f * pulse, 36f * pulse, gold, 0.22f, false, 12, 8)
         b.sphere(z.x, oy, z.y, 21f, 21f, 21f, white, 0.5f, false, 10, 7)
         b.sphere(z.x, oy, z.y, 9f, 9f, 9f, white, 1f, false, 8, 6)
@@ -1482,6 +1617,12 @@ class Scene(private val g: GameView) {
                 b.ring(0f, 0f, 0f, 64f * kk, 64f * kk + 4f, gold, 0.75f * (1f - kk), false, 22)
                 b.pop()
             }
+            for (i in 0 until 16) {
+                val kk = (t * 1.6f + i * 0.0625f) % 1f
+                val a = i * 0.9f + t * 7f
+                val rad = 130f * (1f - kk)
+                b.sphere(22f + (1f - kk) * 30f, sin(a) * rad, cos(a) * rad, 3.6f, 3.6f, 3.6f, white, 0.3f + 0.7f * kk, false, 5, 3)
+            }
             // sigilo no chão da conjuradora
             val sr = 78f * (0.4f + 0.6f * k)
             b.ring(0f, -38.6f, 0f, sr, sr + 3.5f, white, 0.8f * k, false, 36)
@@ -1492,7 +1633,7 @@ class Scene(private val g: GameView) {
                 b.pop()
             }
         } else {
-            val k = (bm.life / 0.45f).coerceIn(0f, 1f)
+            val k = sqrt((bm.life / 0.7f).coerceIn(0f, 1f))
             val fl2 = 0.94f + 0.06f * sin(t * 60f)
             b.box(850f, 0f, 0f, 1700f, 140f * k * fl2, 200f * k, gold, 0.14f, false)
             b.box(850f, 0f, 0f, 1700f, 100f * k, 146f * k, hot, 0.24f, false)

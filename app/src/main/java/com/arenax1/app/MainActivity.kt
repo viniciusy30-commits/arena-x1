@@ -50,6 +50,16 @@ class MainActivity : AppCompatActivity() {
         mostrarNovidades()
     }
 
+    override fun onPause() {
+        super.onPause()
+        game?.onPauseGame()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        game?.onResumeGame()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideBars()

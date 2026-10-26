@@ -7,6 +7,9 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
+import android.opengl.GLSurfaceView
+import android.opengl.Matrix
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -31,6 +34,8 @@ open class U(var x: Float, var y: Float, val team: Int, var maxHp: Float, val r:
     var markT = 0f
     var face = if (team == 0) 0f else Math.PI.toFloat()
     var walk = 0f
+    var mv = 0f
+    var castT = 0f
 }
 
 class Minion(x: Float, y: Float, team: Int, val caster: Boolean) :
@@ -68,8 +73,16 @@ class Beam(var x: Float, var y: Float, val ang: Float, var delay: Float, val own
     var life = 0.45f
 }
 
-class FT(val x: Float, var y: Float, val s: String, var life: Float, val col: Int)
-class Part(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, val col: Int, val sz: Float)
+class FT(val x: Float, var y: Float, val s: String, var life: Float, val col: Int) {
+    var h = 80f
+}
+class DeadFx(val u: U) {
+    var t = 0f
+}
+class Part(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, val col: Int, val sz: Float) {
+    var z = 20f
+    var vz = 0f
+}
 
 private fun C(h: Long): Int = h.toInt()
 private fun rgb(r: Int, g: Int, b: Int): Int =
@@ -77,65 +90,70 @@ private fun rgb(r: Int, g: Int, b: Int): Int =
 
 // ------------------------------------------------------------------- O JOGO
 
-class GameView(ctx: Context) : View(ctx) {
+class GameView(ctx: Context) : FrameLayout(ctx) {
 
-    private val W = 4200f
-    private val H = 1280f
-    private val LT = 320f
-    private val LB = 960f
-    private val CY = 640f
-    private val d = resources.displayMetrics.density
-    private val rnd = Random(System.nanoTime())
+    internal val W = 4200f
+    internal val H = 1280f
+    internal val LT = 320f
+    internal val LB = 960f
+    internal val CY = 640f
+    internal val d = resources.displayMetrics.density
+    internal val rnd = Random(System.nanoTime())
 
-    private val all = ArrayList<U>()
-    private val minions = ArrayList<Minion>()
-    private val towers = ArrayList<Tower>()
-    private val projs = ArrayList<Proj>()
-    private val zones = ArrayList<Zone>()
-    private val beams = ArrayList<Beam>()
-    private val texts = ArrayList<FT>()
-    private val parts = ArrayList<Part>()
-    private var pl = Champ(420f, 640f, 0, true)
-    private var bot = Champ(3780f, 640f, 1, false)
-    private val champs: List<Champ> get() = listOf(pl, bot)
+    internal val all = ArrayList<U>()
+    internal val minions = ArrayList<Minion>()
+    internal val towers = ArrayList<Tower>()
+    internal val projs = ArrayList<Proj>()
+    internal val zones = ArrayList<Zone>()
+    internal val beams = ArrayList<Beam>()
+    internal val texts = ArrayList<FT>()
+    internal val parts = ArrayList<Part>()
+    internal val deadFx = ArrayList<DeadFx>()
+    internal val lock = Any()
+    internal val vp = FloatArray(16)
+    internal var viewW = 1600f
+    internal val scene = Scene(this)
+    internal var pl = Champ(420f, 640f, 0, true)
+    internal var bot = Champ(3780f, 640f, 1, false)
+    internal val champs: List<Champ> get() = listOf(pl, bot)
 
-    private var t = 0f
-    private var waveT = 3f
-    private var spawnQ = 0
-    private var spawnGap = 0f
-    private var over = 0
-    private var overT = 0f
-    private var shake = 0f
-    private var last = 0L
-    private var camX = 0f
-    private var camY = 0f
-    private var sc = 1f
+    internal var t = 0f
+    internal var waveT = 3f
+    internal var spawnQ = 0
+    internal var spawnGap = 0f
+    internal var over = 0
+    internal var overT = 0f
+    internal var shake = 0f
+    internal var last = 0L
+    internal var camX = 0f
+    internal var camY = 0f
+    internal var sc = 1f
 
-    private val pt = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val st = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) }
-    private val path = Path()
+    internal val pt = Paint(Paint.ANTI_ALIAS_FLAG)
+    internal val st = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    internal val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) }
+    internal val path = Path()
 
-    private val CDS = floatArrayOf(5f, 10f, 7f, 30f)
-    private val COST = floatArrayOf(50f, 60f, 70f, 100f)
-    private val RANGE = floatArrayOf(950f, 0f, 780f, 1700f)
-    private val CH_RANGE = 560f
+    internal val CDS = floatArrayOf(5f, 10f, 7f, 30f)
+    internal val COST = floatArrayOf(50f, 60f, 70f, 100f)
+    internal val RANGE = floatArrayOf(950f, 0f, 780f, 1700f)
+    internal val CH_RANGE = 560f
 
     // controles
-    private var joyId = -1
-    private var jbx = 0f
-    private var jby = 0f
-    private var jkx = 0f
-    private var jky = 0f
-    private var joyDx = 0f
-    private var joyDy = 0f
-    private val bId = IntArray(5) { -1 }
-    private val bDrag = BooleanArray(5)
-    private val bAx = FloatArray(5)
-    private val bAy = FloatArray(5)
-    private val bx = FloatArray(5)
-    private val by = FloatArray(5)
-    private val br = FloatArray(5)
+    internal var joyId = -1
+    internal var jbx = 0f
+    internal var jby = 0f
+    internal var jkx = 0f
+    internal var jky = 0f
+    internal var joyDx = 0f
+    internal var joyDy = 0f
+    internal val bId = IntArray(5) { -1 }
+    internal val bDrag = BooleanArray(5)
+    internal val bAx = FloatArray(5)
+    internal val bAy = FloatArray(5)
+    internal val bx = FloatArray(5)
+    internal val by = FloatArray(5)
+    internal val br = FloatArray(5)
 
     init {
         newGame()
@@ -143,7 +161,7 @@ class GameView(ctx: Context) : View(ctx) {
 
     private fun newGame() {
         minions.clear(); towers.clear(); projs.clear(); zones.clear()
-        beams.clear(); texts.clear(); parts.clear()
+        beams.clear(); texts.clear(); parts.clear(); deadFx.clear()
         towers.add(Tower(300f, CY, 0, true))
         towers.add(Tower(700f, CY, 0, false))
         towers.add(Tower(1500f, CY, 0, false))
@@ -176,30 +194,23 @@ class GameView(ctx: Context) : View(ctx) {
 
     // ----------------------------------------------------------------- LOOP
 
-    override fun onDraw(c: Canvas) {
-        val now = System.nanoTime()
-        var dt = if (last == 0L) 0.016f else (now - last) / 1e9f
-        last = now
-        if (dt > 0.05f) dt = 0.05f
-        update(dt)
-        render(c)
-        postInvalidateOnAnimation()
-    }
-
-    private fun tick(u: U, dt: Float) {
+    internal fun tick(u: U, dt: Float) {
         u.atkCd -= dt
         if (u.rootT > 0f) u.rootT -= dt
         if (u.slowT > 0f) u.slowT -= dt
         if (u.flash > 0f) u.flash -= dt
         if (u.markT > 0f) u.markT -= dt
+        if (u.mv > 0f) u.mv -= dt
+        if (u.castT > 0f) u.castT -= dt
         if (u.shieldT > 0f) {
             u.shieldT -= dt
             if (u.shieldT <= 0f) u.shield = 0f
         }
     }
 
-    private fun update(dt: Float) {
+    internal fun update(dt: Float) {
         updFx(dt)
+        updateCam()
         if (shake > 0f) shake -= dt * 1.5f
         if (over != 0) {
             overT += dt
@@ -241,25 +252,36 @@ class GameView(ctx: Context) : View(ctx) {
         while (pi.hasNext()) {
             val p = pi.next()
             p.x += p.vx * dt; p.y += p.vy * dt
+            p.z += p.vz * dt; p.vz -= 520f * dt
+            if (p.z < 3f) { p.z = 3f; p.vz = 0f }
             p.vx *= 0.95f; p.vy *= 0.95f
             p.life -= dt
             if (p.life <= 0f) pi.remove()
         }
+        val di = deadFx.iterator()
+        while (di.hasNext()) {
+            val f = di.next()
+            f.t += dt
+            if (f.t > 0.8f) di.remove()
+        }
         val ti = texts.iterator()
         while (ti.hasNext()) {
             val f = ti.next()
-            f.y -= 38f * dt
+            f.h += 38f * dt
             f.life -= dt
             if (f.life <= 0f) ti.remove()
         }
     }
 
-    private fun burst(x: Float, y: Float, col: Int, n: Int) {
+    internal fun burst(x: Float, y: Float, col: Int, n: Int) {
         if (parts.size > 450) return
         repeat(n) {
             val a = rnd.nextFloat() * 6.283f
             val s = 40f + rnd.nextFloat() * 220f
-            parts.add(Part(x, y, cos(a) * s, sin(a) * s, 0.35f + rnd.nextFloat() * 0.4f, col, 3f + rnd.nextFloat() * 4f))
+            val p = Part(x, y, cos(a) * s, sin(a) * s, 0.35f + rnd.nextFloat() * 0.4f, col, 3f + rnd.nextFloat() * 4f)
+            p.z = 14f + rnd.nextFloat() * 24f
+            p.vz = 60f + rnd.nextFloat() * 200f
+            parts.add(p)
         }
     }
 
@@ -269,7 +291,7 @@ class GameView(ctx: Context) : View(ctx) {
         if (u.dead || over != 0) return
         if (u is Tower && u.nexus && towers.any { !it.dead && !it.nexus && it.team == u.team }) {
             if (u.flash <= 0f) {
-                texts.add(FT(u.x, u.y - 110f, "IMUNE", 0.8f, C(0xFF80DEEA)))
+                texts.add(FT(u.x, u.y, "IMUNE", 0.8f, C(0xFF80DEEA)))
                 u.flash = 0.3f
             }
             return
@@ -284,7 +306,7 @@ class GameView(ctx: Context) : View(ctx) {
         u.flash = 0.1f
         if (a >= 1f) {
             val big = u is Champ
-            texts.add(FT(u.x + rnd.nextFloat() * 20f - 10f, u.y - u.r - 28f, a.roundToInt().toString(), 0.7f,
+            texts.add(FT(u.x + rnd.nextFloat() * 20f - 10f, u.y, a.roundToInt().toString(), 0.7f,
                 if (big) C(0xFFFFD54F) else C(0xFFFFFFFF)))
         }
         if (u.hp <= 0f) kill(u, src)
@@ -292,14 +314,15 @@ class GameView(ctx: Context) : View(ctx) {
 
     private fun kill(u: U, src: U?) {
         u.dead = true
-        burst(u.x, u.y, if (u.team == 0) C(0xFF4FC3F7) else C(0xFFFF5252), 20)
+        burst(u.x, u.y, if (u.team == 0) C(0xFF4FC3F7) else C(0xFFFF5252), if (u is Tower) 46 else 20)
+        if (u is Minion || u is Champ) deadFx.add(DeadFx(u))
         if (u is Minion) {
             for (c in champs) {
                 if (!c.dead && c.team != u.team && hypot(c.x - u.x, c.y - u.y) < 900f) {
                     c.xp += 16f
                     if (src === c) {
                         c.gold += 22f
-                        texts.add(FT(c.x, c.y - 56f, "+22", 0.9f, C(0xFFFFC107)))
+                        texts.add(FT(c.x, c.y, "+22", 0.9f, C(0xFFFFC107)))
                     }
                     levelCheck(c)
                 }
@@ -312,7 +335,7 @@ class GameView(ctx: Context) : View(ctx) {
             } else {
                 for (c in champs) if (c.team != u.team) {
                     c.gold += 120f; c.xp += 60f
-                    texts.add(FT(c.x, c.y - 56f, "TORRE +120", 1.2f, C(0xFFFFC107)))
+                    texts.add(FT(c.x, c.y, "TORRE +120", 1.2f, C(0xFFFFC107)))
                     levelCheck(c)
                 }
             }
@@ -325,7 +348,7 @@ class GameView(ctx: Context) : View(ctx) {
                 k.kills++
                 k.gold += 180f
                 k.xp += 120f
-                texts.add(FT(k.x, k.y - 60f, "ABATE! +180", 1.3f, C(0xFFFF8A65)))
+                texts.add(FT(k.x, k.y, "ABATE! +180", 1.3f, C(0xFFFF8A65)))
                 levelCheck(k)
             }
         }
@@ -337,7 +360,7 @@ class GameView(ctx: Context) : View(ctx) {
             c.level++
             c.maxHp += 75f
             c.hp += 75f
-            texts.add(FT(c.x, c.y - 80f, "NIVEL " + c.level, 1.3f, C(0xFF69F0AE)))
+            texts.add(FT(c.x, c.y, "NIVEL " + c.level, 1.3f, C(0xFF69F0AE)))
             burst(c.x, c.y, C(0xFF69F0AE), 16)
         }
     }
@@ -374,6 +397,7 @@ class GameView(ctx: Context) : View(ctx) {
         u.y = u.y.coerceIn(LT + 24f, LB - 24f)
         u.face = atan2(dy, dx)
         u.walk += dt * s * 0.05f
+        u.mv = 0.1f
     }
 
     // -------------------------------------------------------------- CAMPEÃO
@@ -446,6 +470,7 @@ class GameView(ctx: Context) : View(ctx) {
         c.mana -= COST[s]
         c.cd[s] = CDS[s]
         c.face = ang
+        c.castT = 0.45f
         val ap = c.ap
         val cs = cos(ang)
         val sn = sin(ang)
@@ -688,7 +713,7 @@ class GameView(ctx: Context) : View(ctx) {
         beams.removeAll { it.fired && it.life <= 0f }
     }
 
-    // ================================================================ RENDER
+    // ============================================================ CÂMERA 3D
 
     private fun blk(c: Canvas, l: Float, tt: Float, r: Float, b: Float, col: Int) {
         pt.style = Paint.Style.FILL
@@ -699,388 +724,117 @@ class GameView(ctx: Context) : View(ctx) {
         c.drawRect(l, tt, r, b, st)
     }
 
-    private fun render(c: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        sc = h / 760f
-        val vw = w / sc
-        val vh = h / sc
-        camX = (pl.x - vw / 2f).coerceIn(0f, max(0f, W - vw))
-        camY = CY - vh / 2f
+
+    internal fun updateCam() {
+        camX = pl.x.coerceIn(760f, W - 760f)
         var sx = 0f
-        var sy = 0f
+        var sz = 0f
         if (shake > 0f) {
-            sx = (rnd.nextFloat() - 0.5f) * 14f * min(1f, shake)
-            sy = (rnd.nextFloat() - 0.5f) * 14f * min(1f, shake)
+            sx = (rnd.nextFloat() - 0.5f) * 16f * min(1f, shake)
+            sz = (rnd.nextFloat() - 0.5f) * 16f * min(1f, shake)
         }
-        c.drawColor(C(0xFF141C0E))
-        c.save()
-        c.scale(sc, sc)
-        c.translate(-camX + sx, -camY + sy)
-
-        drawGround(c, vw, vh)
-        drawBases(c)
-        for (tw in towers) if (tw.dead && !tw.nexus) drawRubble(c, tw)
-        for (z in zones) drawZone(c, z)
-        for (b in beams) drawBeam(c, b)
-
-        val order = all.filter { !it.dead && it.x > camX - 150f && it.x < camX + vw + 150f }.sortedBy { it.y }
-        for (u in order) {
-            when (u) {
-                is Tower -> drawTower(c, u)
-                is Minion -> drawMinion(c, u)
-                is Champ -> drawChamp(c, u)
-            }
-        }
-        for (q in projs) drawProj(c, q)
-        for (p in parts) {
-            pt.style = Paint.Style.FILL
-            pt.color = p.col
-            pt.alpha = (255 * min(1f, p.life * 2.5f)).toInt().coerceIn(0, 255)
-            c.drawRect(p.x - p.sz / 2f, p.y - p.sz / 2f, p.x + p.sz / 2f, p.y + p.sz / 2f, pt)
-        }
-        tp.textAlign = Paint.Align.CENTER
-        tp.textSize = 20f
-        for (f in texts) {
-            tp.color = C(0xFF000000)
-            c.drawText(f.s, f.x + 1.5f, f.y + 1.5f, tp)
-            tp.color = f.col
-            c.drawText(f.s, f.x, f.y, tp)
-        }
-        c.restore()
-        drawHud(c, w, h, vw)
+        val aspect = if (height > 0) width.toFloat() / height.toFloat() else 2f
+        Matrix.perspectiveM(projM, 0, 45f, aspect, 120f, 4600f)
+        Matrix.setLookAtM(viewM, 0, camX + sx, 560f, CY + 400f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
+        Matrix.multiplyMM(vp, 0, projM, 0, viewM, 0)
+        viewW = 570f * aspect
     }
 
-    private fun drawGround(c: Canvas, vw: Float, vh: Float) {
-        val ts = 64f
-        val tx0 = max(0, (camX / ts).toInt())
-        val tx1 = min((W / ts).toInt() - 1, ((camX + vw) / ts).toInt())
-        val ty0 = max(0, (camY / ts).toInt())
-        val ty1 = min((H / ts).toInt() - 1, ((camY + vh) / ts).toInt())
-        pt.style = Paint.Style.FILL
-        for (ty in ty0..ty1) {
-            for (tx in tx0..tx1) {
-                val hs = ((tx * 73856093) xor (ty * 19349663)) and 0x7fffffff
-                val v = hs % 20
-                val x = tx * ts
-                val y = ty * ts
-                if (ty in 5..14) {
-                    val mid = ty in 8..11
-                    if (mid) {
-                        pt.color = rgb(150 + v, 128 + v, 92 + v)
-                        c.drawRect(x, y, x + ts, y + ts, pt)
-                        pt.color = rgb(120 + v, 100 + v, 70 + v)
-                        c.drawRect(x, y + ts - 3f, x + ts, y + ts, pt)
-                        c.drawRect(x + ts - 3f, y, x + ts, y + ts, pt)
-                        if (hs % 5 == 0) {
-                            pt.color = rgb(170 + v, 150 + v, 110 + v)
-                            c.drawRect(x + 10f, y + 10f, x + 28f, y + 22f, pt)
-                        }
-                    } else {
-                        pt.color = rgb(86 + v, 140 + v, 58 + v)
-                        c.drawRect(x, y, x + ts, y + ts, pt)
-                        if (hs % 4 == 0) {
-                            pt.color = rgb(66 + v, 118 + v, 44 + v)
-                            c.drawRect(x + 14f, y + 18f, x + 20f, y + 30f, pt)
-                            c.drawRect(x + 36f, y + 34f, x + 42f, y + 44f, pt)
-                        }
-                        if (hs % 23 == 0) {
-                            pt.color = rgb(255, 235, 59)
-                            c.drawRect(x + 30f, y + 12f, x + 36f, y + 18f, pt)
-                        }
-                    }
-                } else if (ty == 4 || ty == 15) {
-                    pt.color = rgb(40, 62, 36)
-                    c.drawRect(x, y, x + ts, y + ts, pt)
-                    val top = if (ty == 4) y + 14f else y
-                    pt.color = rgb(118 + v, 118 + v, 126 + v)
-                    c.drawRect(x, top, x + ts, top + ts - 14f, pt)
-                    pt.color = rgb(150 + v, 150 + v, 158 + v)
-                    c.drawRect(x, top, x + ts, top + 8f, pt)
-                    pt.color = rgb(80, 80, 90)
-                    c.drawRect(x, top + 30f, x + ts, top + 33f, pt)
-                    c.drawRect(x + (if (hs % 2 == 0) 20f else 40f), top + 8f, x + (if (hs % 2 == 0) 23f else 43f), top + 30f, pt)
-                } else {
-                    pt.color = rgb(34 + v, 62 + v, 30 + v)
-                    c.drawRect(x, y, x + ts, y + ts, pt)
-                    if (hs % 2 == 0) {
-                        pt.color = rgb(84, 56, 30)
-                        c.drawRect(x + 26f, y + 30f, x + 38f, y + 58f, pt)
-                        pt.color = rgb(30 + v, 100 + v, 36)
-                        c.drawRect(x + 8f, y + 4f, x + 56f, y + 36f, pt)
-                        pt.color = rgb(52 + v, 140 + v, 54)
-                        c.drawRect(x + 8f, y + 4f, x + 56f, y + 12f, pt)
-                        st.color = C(0x88000000); st.strokeWidth = 1.5f
-                        c.drawRect(x + 8f, y + 4f, x + 56f, y + 36f, st)
-                    }
-                }
-            }
-        }
-        // tinta dos times
-        pt.color = C(0x1A2196F3)
-        c.drawRect(0f, LT, W / 2f, LB, pt)
-        pt.color = C(0x1AF44336)
-        c.drawRect(W / 2f, LT, W, LB, pt)
-        // linha do meio
-        pt.color = C(0x33FFFFFF)
-        c.drawRect(W / 2f - 3f, LT, W / 2f + 3f, LB, pt)
+    private val viewM = FloatArray(16)
+    private val projM = FloatArray(16)
+    private val sp = FloatArray(3)
+
+    /** Projeta um ponto do mundo na tela: sp = (x, y, pixels por unidade). */
+    internal fun proj(x: Float, y: Float, z: Float): Boolean {
+        val cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12]
+        val cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13]
+        val cw = vp[3] * x + vp[7] * y + vp[11] * z + vp[15]
+        if (cw < 50f) return false
+        sp[0] = (cx / cw * 0.5f + 0.5f) * width
+        sp[1] = (1f - (cy / cw * 0.5f + 0.5f)) * height
+        sp[2] = height / (0.8284f * cw)
+        return true
     }
 
-    private fun drawBases(c: Canvas) {
-        for (team in 0..1) {
-            val cx = if (team == 0) 300f else W - 300f
-            if (cx < camX - 400f || cx > camX + width / sc + 400f) continue
-            pt.style = Paint.Style.FILL
-            pt.color = if (team == 0) C(0x334FC3F7) else C(0x33FF5252)
-            c.drawCircle(cx, CY, 260f, pt)
-            pt.color = if (team == 0) rgb(80, 90, 110) else rgb(110, 80, 80)
-            c.drawRect(cx - 150f, CY - 150f, cx + 150f, CY + 150f, pt)
-            pt.color = if (team == 0) rgb(60, 70, 90) else rgb(90, 60, 60)
-            c.drawRect(cx - 130f, CY - 130f, cx + 130f, CY + 130f, pt)
-        }
-    }
-
-    private fun drawRubble(c: Canvas, tw: Tower) {
-        blk(c, tw.x - 30f, tw.y + 4f, tw.x + 4f, tw.y + 26f, rgb(100, 100, 108))
-        blk(c, tw.x + 6f, tw.y + 12f, tw.x + 34f, tw.y + 28f, rgb(85, 85, 92))
-    }
-
-    private fun hpBar(c: Canvas, u: U, wd: Float, yo: Float) {
-        val x = u.x - wd / 2f
-        val y = u.y - yo
+    private fun bar(c: Canvas, u: U, wd: Float, hgt: Float) {
+        if (!proj(u.x, groundH(u.x, u.y) + hgt, u.y)) return
+        val w = wd * sp[2]
+        val th = max(3f * d, 6f * sp[2])
+        val x = sp[0] - w / 2f
+        val y = sp[1]
         pt.style = Paint.Style.FILL
         pt.color = C(0xCC000000)
-        c.drawRect(x - 1.5f, y - 1.5f, x + wd + 1.5f, y + 6.5f, pt)
+        c.drawRect(x - 1.5f, y - 1.5f, x + w + 1.5f, y + th + 1.5f, pt)
         pt.color = if (u.team == 0) C(0xFF43A047) else C(0xFFE53935)
-        c.drawRect(x, y, x + wd * (u.hp / u.maxHp).coerceIn(0f, 1f), y + 5f, pt)
+        c.drawRect(x, y, x + w * (u.hp / u.maxHp).coerceIn(0f, 1f), y + th, pt)
         if (u.shield > 0f) {
             pt.color = C(0xFFE3F2FD)
-            c.drawRect(x, y - 3f, x + wd * (u.shield / u.maxHp).coerceIn(0f, 1f), y, pt)
+            c.drawRect(x, y - th * 0.5f, x + w * (u.shield / u.maxHp).coerceIn(0f, 1f), y, pt)
         }
     }
 
-    private fun drawTower(c: Canvas, tw: Tower) {
-        val s = if (tw.nexus) 1.7f else 1f
-        val x = tw.x
-        val y = tw.y
-        val team = if (tw.team == 0) C(0xFF4FC3F7) else C(0xFFFF5252)
-        pt.style = Paint.Style.FILL
-        pt.color = C(0x55000000)
-        c.drawOval(x - 46f * s, y + 18f * s, x + 46f * s, y + 40f * s, pt)
-        val f = tw.flash > 0f
-        blk(c, x - 34f * s, y - 4f * s, x + 34f * s, y + 30f * s, if (f) C(0xFFFFFFFF) else rgb(110, 110, 118))
-        blk(c, x - 26f * s, y - 50f * s, x + 26f * s, y - 4f * s, if (f) C(0xFFFFFFFF) else rgb(140, 140, 150))
-        blk(c, x - 31f * s, y - 62f * s, x + 31f * s, y - 50f * s, if (f) C(0xFFFFFFFF) else rgb(90, 90, 100))
-        pt.color = team
-        c.drawRect(x - 10f * s, y - 40f * s, x + 10f * s, y - 14f * s, pt)
-        // cristal
-        val pulse = 1f + 0.12f * sin(t * 3f + x)
-        val cy = y - 86f * s
-        pt.color = (team and 0x00FFFFFF) or C(0x44000000)
-        c.drawCircle(x, cy, 34f * s * pulse, pt)
-        path.reset()
-        path.moveTo(x, cy - 22f * s * pulse)
-        path.lineTo(x + 14f * s, cy)
-        path.lineTo(x, cy + 22f * s * pulse)
-        path.lineTo(x - 14f * s, cy)
-        path.close()
-        pt.color = team
-        c.drawPath(path, pt)
-        st.color = C(0xAA000000); st.strokeWidth = 2f
-        c.drawPath(path, st)
-        pt.color = C(0xAAFFFFFF)
-        c.drawRect(x - 3f * s, cy - 10f * s, x + 3f * s, cy + 2f * s, pt)
-        // tochas
-        for (sd in intArrayOf(-1, 1)) {
-            val tx = x + sd * 42f * s
-            pt.color = rgb(90, 60, 30)
-            c.drawRect(tx - 3f, y + 2f, tx + 3f, y + 24f, pt)
-            val fl = 6f + 3f * sin(t * 14f + tx)
-            pt.color = C(0xFFFFA726)
-            c.drawRect(tx - fl / 2f, y - fl, tx + fl / 2f, y + 2f, pt)
-            pt.color = C(0xFFFFEE58)
-            c.drawRect(tx - fl / 4f, y - fl / 2f, tx + fl / 4f, y + 2f, pt)
+    /** Barras de vida, nível e números de dano, projetados sobre o mundo 3D. */
+    internal fun drawWorldUi(c: Canvas) {
+        for (tw in towers) {
+            if (tw.dead || abs(tw.x - camX) > viewW) continue
+            bar(c, tw, if (tw.nexus) 130f else 80f, if (tw.nexus) 290f else 172f)
         }
-        hpBar(c, tw, 80f * s, 118f * s)
-    }
-
-    private fun human(c: Canvas, u: U, s: Float, body: Int, skin: Int, leg: Int, hair: Int, longHair: Boolean) {
-        val x = u.x
-        val y = u.y
-        val dir = if (cos(u.face) >= 0f) 1f else -1f
-        val sw = sin(u.walk * 2f) * 3f * s
-        val fl = u.flash > 0f
-        val bc = if (fl) C(0xFFFFFFFF) else body
-        val sk = if (fl) C(0xFFFFFFFF) else skin
-        pt.style = Paint.Style.FILL
-        pt.color = C(0x55000000)
-        c.drawOval(x - 13f * s, y + 10f * s, x + 13f * s, y + 19f * s, pt)
-        if (longHair) blk(c, x - 9f * s, y - 27f * s, x + 9f * s, y - 6f * s, hair)
-        blk(c, x - 7f * s + sw * 0.5f, y + 2f * s, x - 1f * s + sw * 0.5f, y + 14f * s, if (fl) bc else leg)
-        blk(c, x + 1f * s - sw * 0.5f, y + 2f * s, x + 7f * s - sw * 0.5f, y + 14f * s, if (fl) bc else leg)
-        blk(c, x - 8f * s, y - 14f * s, x + 8f * s, y + 3f * s, bc)
-        blk(c, x - 12f * s, y - 13f * s, x - 8f * s, y - 1f * s, sk)
-        blk(c, x + 8f * s, y - 13f * s, x + 12f * s, y - 1f * s, sk)
-        blk(c, x - 7f * s, y - 27f * s, x + 7f * s, y - 14f * s, sk)
-        blk(c, x - 8f * s, y - 29f * s, x + 8f * s, y - 22f * s, if (fl) bc else hair)
-        pt.color = C(0xFF212121)
-        val ex = x + dir * 1.5f * s
-        c.drawRect(ex - 4f * s, y - 21f * s, ex - 1.5f * s, y - 18f * s, pt)
-        c.drawRect(ex + 1.5f * s, y - 21f * s, ex + 4f * s, y - 18f * s, pt)
-    }
-
-    private fun drawChamp(c: Canvas, ch: Champ) {
-        val ally = ch.team == 0
-        val s = 1.5f
-        // anel de time
-        st.color = if (ally) C(0xFF4FC3F7) else C(0xFFFF5252)
-        st.strokeWidth = 3f
-        c.drawOval(ch.x - 22f, ch.y + 8f * s - 4f, ch.x + 22f, ch.y + 8f * s + 8f, st)
-        if (ally) {
-            human(c, ch, s, C(0xFFF5F5F5), C(0xFFFFCCA8), C(0xFF3F51B5), C(0xFFFFD54F), true)
-            pt.color = C(0xFF3F51B5)
-            c.drawRect(ch.x - 8f * s, ch.y - 2f * s, ch.x + 8f * s, ch.y + 3f * s, pt)
-        } else {
-            human(c, ch, s, C(0xFF37265A), C(0xFFE0B8A0), C(0xFF1A1030), C(0xFF8E24AA), true)
-            pt.color = C(0xFFAB47BC)
-            c.drawRect(ch.x - 8f * s, ch.y - 2f * s, ch.x + 8f * s, ch.y + 3f * s, pt)
+        for (m in minions) {
+            if (m.dead || abs(m.x - camX) > viewW) continue
+            bar(c, m, 36f, 76f)
         }
-        // cajado
-        val dir = if (cos(ch.face) >= 0f) 1f else -1f
-        val sx = ch.x + dir * 22f
-        pt.color = C(0xFF6D4C41)
-        c.drawRect(sx - 2f, ch.y - 36f, sx + 2f, ch.y + 20f, pt)
-        val glow = 1f + 0.15f * sin(t * 6f)
-        pt.color = if (ally) C(0x55FFF59D) else C(0x55CE93D8)
-        c.drawCircle(sx, ch.y - 42f, 15f * glow, pt)
-        pt.color = if (ally) C(0xFFFFF9C4) else C(0xFFE1BEE7)
-        c.drawRect(sx - 6f, ch.y - 48f, sx + 6f, ch.y - 36f, pt)
-        if (ch.shield > 0f) {
-            pt.color = C(0x334FC3F7)
-            c.drawCircle(ch.x, ch.y - 8f, 36f, pt)
-            st.color = C(0xAA81D4FA); st.strokeWidth = 3f
-            c.drawCircle(ch.x, ch.y - 8f, 36f, st)
+        for (ch in champs) {
+            if (ch.dead) continue
+            bar(c, ch, 70f, 128f)
+            if (proj(ch.x, groundH(ch.x, ch.y) + 128f, ch.y)) {
+                tp.textSize = 12f * d
+                tp.textAlign = Paint.Align.CENTER
+                tp.color = C(0xFFFFFFFF)
+                c.drawText("" + ch.level, sp[0] - 41f * sp[2], sp[1] + 8f * d, tp)
+            }
         }
-        if (ch.rootT > 0f) {
-            st.color = C(0xFFFFF176); st.strokeWidth = 4f
-            c.drawOval(ch.x - 26f, ch.y + 4f, ch.x + 26f, ch.y + 22f, st)
-        }
-        if (ch.markT > 0f) {
-            pt.color = C(0xFFFFF59D)
-            c.drawRect(ch.x - 5f, ch.y - 84f, ch.x + 5f, ch.y - 74f, pt)
-        }
-        hpBar(c, ch, 64f, 70f)
-        tp.textSize = 13f
         tp.textAlign = Paint.Align.CENTER
-        tp.color = C(0xFFFFFFFF)
-        c.drawText("" + ch.level, ch.x - 40f, ch.y - 63f, tp)
-    }
-
-    private fun drawMinion(c: Canvas, m: Minion) {
-        val ally = m.team == 0
-        val s = 0.85f
-        val body = if (ally) C(0xFF3F7FD6) else C(0xFFD64F3F)
-        human(c, m, s, body, C(0xFF7CB342), if (ally) C(0xFF2B4F8F) else C(0xFF8F2F2B), C(0xFF33691E), false)
-        val dir = if (cos(m.face) >= 0f) 1f else -1f
-        if (m.caster) {
-            path.reset()
-            path.moveTo(m.x - 10f * s, m.y - 29f * s)
-            path.lineTo(m.x + 10f * s, m.y - 29f * s)
-            path.lineTo(m.x, m.y - 46f * s)
-            path.close()
-            pt.style = Paint.Style.FILL
-            pt.color = if (ally) C(0xFF1A237E) else C(0xFF7F0000)
-            c.drawPath(path, pt)
-            pt.color = if (ally) C(0xFF4FC3F7) else C(0xFFFF8A80)
-            c.drawRect(m.x + dir * 14f * s - 4f, m.y - 22f * s, m.x + dir * 14f * s + 4f, m.y - 14f * s, pt)
-        } else {
-            pt.style = Paint.Style.FILL
-            pt.color = C(0xFFB0BEC5)
-            val sxx = m.x + dir * 14f * s
-            c.drawRect(sxx - 2f, m.y - 20f * s, sxx + 2f, m.y + 2f * s, pt)
-        }
-        hpBar(c, m, 34f, 52f * s)
-    }
-
-    private fun drawProj(c: Canvas, q: Proj) {
-        pt.style = Paint.Style.FILL
-        when (q.kind) {
-            1 -> {
-                val a = Math.toDegrees(atan2(q.vy, q.vx).toDouble()).toFloat()
-                c.save()
-                c.translate(q.x, q.y)
-                c.rotate(a)
-                pt.color = C(0x55FFF59D)
-                c.drawRect(-60f, -20f, 24f, 20f, pt)
-                pt.color = C(0xFFFFF59D)
-                c.drawRect(-50f, -8f, 20f, 8f, pt)
-                pt.color = C(0xFFFFFFFF)
-                c.drawRect(-30f, -3f, 20f, 3f, pt)
-                c.restore()
-            }
-            0 -> {
-                pt.color = C(0x66FFF59D)
-                c.drawCircle(q.x, q.y, 14f, pt)
-                pt.color = C(0xFFFFFFFF)
-                c.drawRect(q.x - 5f, q.y - 5f, q.x + 5f, q.y + 5f, pt)
-            }
-            2 -> {
-                pt.color = if (q.team == 0) C(0xFF4FC3F7) else C(0xFFFF5252)
-                c.drawRect(q.x - 7f, q.y - 7f, q.x + 7f, q.y + 7f, pt)
-                pt.color = C(0xFFFFFFFF)
-                c.drawRect(q.x - 3f, q.y - 3f, q.x + 3f, q.y + 3f, pt)
-            }
-            else -> {
-                pt.color = if (q.team == 0) C(0xFF81D4FA) else C(0xFFFF8A80)
-                c.drawRect(q.x - 4f, q.y - 4f, q.x + 4f, q.y + 4f, pt)
-            }
+        tp.textSize = 15f * d
+        for (f in texts) {
+            if (!proj(f.x, groundH(f.x, f.y) + f.h, f.y)) continue
+            tp.color = C(0xFF000000)
+            c.drawText(f.s, sp[0] + 1.5f * d, sp[1] + 1.5f * d, tp)
+            tp.color = f.col
+            c.drawText(f.s, sp[0], sp[1], tp)
         }
     }
 
-    private fun drawZone(c: Canvas, z: Zone) {
-        pt.style = Paint.Style.FILL
-        val pulse = 1f + 0.04f * sin(t * 8f)
-        pt.color = C(0x33FFF59D)
-        c.drawCircle(z.x, z.y, z.r * pulse, pt)
-        st.color = C(0xCCFFF59D); st.strokeWidth = 4f
-        c.drawCircle(z.x, z.y, z.r * pulse, st)
-        st.strokeWidth = 2f
-        c.drawCircle(z.x, z.y, z.r * (z.life / 4f).coerceIn(0f, 1f), st)
-        for (i in 0 until 6) {
-            val a = t * 2.5f + i * 1.047f
-            val rr = z.r * 0.6f
-            pt.color = C(0xFFFFFFFF)
-            c.drawRect(z.x + cos(a) * rr - 4f, z.y + sin(a) * rr * 0.6f - 4f,
-                z.x + cos(a) * rr + 4f, z.y + sin(a) * rr * 0.6f + 4f, pt)
+    /** Camada transparente por cima do 3D: atualiza o jogo e desenha o HUD. */
+    inner class HudView(ctx: Context) : View(ctx) {
+        override fun onDraw(c: Canvas) {
+            val now = System.nanoTime()
+            var dt = if (last == 0L) 0.016f else (now - last) / 1e9f
+            last = now
+            if (dt > 0.05f) dt = 0.05f
+            synchronized(lock) {
+                update(dt)
+                drawWorldUi(c)
+                drawHud(c, width.toFloat(), height.toFloat(), viewW)
+            }
+            postInvalidateOnAnimation()
         }
-        pt.color = C(0xFFFFEB3B)
-        c.drawRect(z.x - 10f, z.y - 10f, z.x + 10f, z.y + 10f, pt)
     }
 
-    private fun drawBeam(c: Canvas, b: Beam) {
-        val deg = Math.toDegrees(b.ang.toDouble()).toFloat()
-        c.save()
-        c.translate(b.x, b.y - 8f)
-        c.rotate(deg)
-        pt.style = Paint.Style.FILL
-        if (!b.fired) {
-            val k = 1f - (b.delay / 0.6f).coerceIn(0f, 1f)
-            pt.color = C(0x33FFF59D)
-            c.drawRect(0f, -55f, 1700f, 55f, pt)
-            pt.color = C(0x88FFF59D)
-            c.drawRect(0f, -55f * k, 1700f, 55f * k, pt)
-        } else {
-            val k = (b.life / 0.45f).coerceIn(0f, 1f)
-            pt.color = C(0x55FFF59D)
-            c.drawRect(0f, -70f * k, 1700f, 70f * k, pt)
-            pt.color = C(0xCCFFFDE7)
-            c.drawRect(0f, -42f * k, 1700f, 42f * k, pt)
-            pt.color = C(0xFFFFFFFF)
-            c.drawRect(0f, -20f * k, 1700f, 20f * k, pt)
-        }
-        c.restore()
+    private val glv = GLSurfaceView(ctx).apply {
+        setEGLContextClientVersion(2)
+        setEGLConfigChooser(MsaaChooser())
+        setRenderer(GlRenderer(this@GameView))
+        renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+    }
+    private val hudView = HudView(ctx)
+
+    init {
+        addView(glv, FrameLayout.LayoutParams(-1, -1))
+        addView(hudView, FrameLayout.LayoutParams(-1, -1))
     }
 
+    fun onPauseGame() = glv.onPause()
+    fun onResumeGame() = glv.onResume()
     // ================================================================== HUD
 
     private fun hudText(c: Canvas, s: String, x: Float, y: Float, size: Float, col: Int, al: Paint.Align) {
@@ -1162,28 +916,7 @@ class GameView(ctx: Context) : View(ctx) {
             c.drawRect(xx - 3.5f * d, yy - 3.5f * d, xx + 3.5f * d, yy + 3.5f * d, pt)
         }
         st.color = C(0xAAFFFFFF); st.strokeWidth = 1.5f
-        c.drawRect(mx + camX / W * mw, my, mx + (camX + vw) / W * mw, my + mh, st)
-
-        // linhas de mira
-        for (i in 0..3) {
-            if (bId[i] != -1 && bDrag[i] && !pl.dead) {
-                val ang = atan2(bAy[i], bAx[i])
-                val len = when (i) {
-                    0 -> 950f
-                    2 -> (hypot(bAx[i], bAy[i]) / d * 3.2f).coerceIn(150f, 780f)
-                    3 -> 1700f
-                    else -> 120f
-                }
-                val ox = (pl.x - camX) * sc
-                val oy = (pl.y - camY) * sc
-                st.color = C(0xAAFFF59D); st.strokeWidth = 4f * d
-                c.drawLine(ox, oy, ox + cos(ang) * len * sc, oy + sin(ang) * len * sc, st)
-                if (i == 2) {
-                    pt.color = C(0x44FFF59D)
-                    c.drawCircle(ox + cos(ang) * len * sc, oy + sin(ang) * len * sc, 190f * sc, pt)
-                }
-            }
-        }
+        c.drawRect(mx + (camX - vw / 2f) / W * mw, my, mx + (camX + vw / 2f) / W * mw, my + mh, st)
 
         // joystick
         val jx = if (joyId != -1) jbx else 110f * d
@@ -1284,6 +1017,11 @@ class GameView(ctx: Context) : View(ctx) {
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        synchronized(lock) { handleTouch(e) }
+        return true
+    }
+
+    private fun handleTouch(e: MotionEvent) {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex
@@ -1301,7 +1039,6 @@ class GameView(ctx: Context) : View(ctx) {
                 for (i in 0..4) { bId[i] = -1; bDrag[i] = false }
             }
         }
-        return true
     }
 
     private fun pDown(id: Int, x: Float, y: Float) {

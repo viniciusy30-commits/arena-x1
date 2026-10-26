@@ -1,7 +1,7 @@
-#id 2026-10-26-a
-#titulo Primeira versão: Arena X1
-- Modo 1v1 com a Lux contra uma Lux sombria
-- Mapa de lane única estilo ARAM com torres e Nexus
-- Minions melee e magos em ondas a cada 28 segundos
-- Habilidades Q, W, E e R (arraste o botão para mirar)
-- Atualização pelo próprio app em Configurações
+#id 2026-10-26-b
+#titulo Arena X1 agora em 3D
+- Mapa 3D com relevo, rio, ponte, selva e bases
+- Lux, minions e torres modelados em 3D com animações
+- Câmera inclinada estilo LoL que segue a campeã
+- Magias com brilho, laser gigante e zona de lentidão em 3D
+- Barras de vida e números de dano seguem os personagens

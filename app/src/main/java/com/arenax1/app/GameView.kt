@@ -92,7 +92,7 @@ private fun rgb(r: Int, g: Int, b: Int): Int =
 
 class GameView(ctx: Context) : FrameLayout(ctx) {
 
-    internal val W = 4200f
+    internal val W = MAP_W
     internal val H = 1280f
     internal val LT = 320f
     internal val LB = 960f
@@ -113,8 +113,8 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal val vp = FloatArray(16)
     internal var viewW = 1600f
     internal val scene = Scene(this)
-    internal var pl = Champ(420f, 640f, 0, true)
-    internal var bot = Champ(3780f, 640f, 1, false)
+    internal var pl = Champ(540f, 640f, 0, true)
+    internal var bot = Champ(MAP_W - 540f, 640f, 1, false)
     internal val champs: List<Champ> get() = listOf(pl, bot)
 
     internal var t = 0f
@@ -162,14 +162,14 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     private fun newGame() {
         minions.clear(); towers.clear(); projs.clear(); zones.clear()
         beams.clear(); texts.clear(); parts.clear(); deadFx.clear()
-        towers.add(Tower(300f, CY, 0, true))
-        towers.add(Tower(700f, CY, 0, false))
-        towers.add(Tower(1500f, CY, 0, false))
-        towers.add(Tower(W - 300f, CY, 1, true))
-        towers.add(Tower(W - 700f, CY, 1, false))
-        towers.add(Tower(W - 1500f, CY, 1, false))
-        pl = Champ(430f, CY, 0, true)
-        bot = Champ(W - 430f, CY, 1, false)
+        towers.add(Tower(380f, CY, 0, true))
+        towers.add(Tower(1450f, CY, 0, false))
+        towers.add(Tower(2850f, CY, 0, false))
+        towers.add(Tower(W - 380f, CY, 1, true))
+        towers.add(Tower(W - 1450f, CY, 1, false))
+        towers.add(Tower(W - 2850f, CY, 1, false))
+        pl = Champ(540f, CY, 0, true)
+        bot = Champ(W - 540f, CY, 1, false)
         pl.mana = pl.maxMana
         bot.mana = bot.maxMana
         t = 0f; waveT = 3f; spawnQ = 0; spawnGap = 0f
@@ -229,8 +229,8 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 val idx = 5 - spawnQ
                 val caster = idx >= 3
                 val yy = CY + rnd.nextFloat() * 90f - 45f
-                minions.add(Minion(480f, yy, 0, caster))
-                minions.add(Minion(W - 480f, yy, 1, caster))
+                minions.add(Minion(640f, yy, 0, caster))
+                minions.add(Minion(W - 640f, yy, 1, caster))
                 spawnQ--
                 spawnGap = 0.8f
             }
@@ -411,7 +411,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 c.hp = c.maxHp
                 c.mana = c.maxMana
                 c.shield = 0f; c.rootT = 0f; c.slowT = 0f
-                c.x = if (c.team == 0) 430f else W - 430f
+                c.x = if (c.team == 0) 540f else W - 540f
                 c.y = CY
             }
             return
@@ -420,7 +420,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         if (c.haste > 0f) c.haste -= dt
         c.mana = min(c.maxMana, c.mana + (8f + c.level) * dt)
         val nx = towers[if (c.team == 0) 0 else 3]
-        val home = hypot(nx.x - c.x, nx.y - c.y) < 340f
+        val home = hypot(nx.x - c.x, nx.y - c.y) < 380f
         c.hp = min(c.maxHp, c.hp + (if (home) 120f else 3f + c.level) * dt)
         if (home) c.mana = min(c.maxMana, c.mana + 40f * dt)
         if (c.player) playerCtl(c, dt) else botThink(c, dt)
@@ -428,7 +428,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
     private fun playerCtl(c: Champ, dt: Float) {
         val l = hypot(joyDx, joyDy)
-        if (l > 0.15f) moveU(c, joyDx, joyDy, 270f, dt)
+        if (l > 0.15f) moveU(c, joyDx, joyDy, 330f, dt)
         if (bId[4] != -1) {
             val tg = nearest(c.x, c.y, c.team, CH_RANGE, -150f)
             basicAttack(c, tg)
@@ -518,12 +518,12 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     private fun botThink(b: Champ, dt: Float) {
         val p = pl
         val dp = if (p.dead) 1e9f else hypot(p.x - b.x, p.y - b.y)
-        val homeX = W - 300f
+        val homeX = W - 380f
         var minX = 0f
         for (tw in towers) if (!tw.dead && tw.team == 0) minX = max(minX, tw.x + if (tw.nexus) 560f else 680f)
 
         if (b.hp < b.maxHp * 0.3f) {
-            moveU(b, homeX - b.x, CY - b.y, 250f, dt)
+            moveU(b, homeX - b.x, CY - b.y, 310f, dt)
             if (b.hp < b.maxHp * 0.5f && dp < 700f) cast(b, 1, 0f, 0f, false)
             return
         }
@@ -537,7 +537,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             mx += -sin(ang) * perp * 0.8f
             my += cos(ang) * perp * 0.8f
             if (b.x <= minX && mx < 0f) mx = 0f
-            moveU(b, mx, my, 245f, dt)
+            moveU(b, mx, my, 305f, dt)
             b.face = ang
             if (dp < 950f) cast(b, 0, ang, 0f, false)
             if (dp < 760f) cast(b, 2, ang, min(dp, 760f), false)
@@ -545,13 +545,13 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             if (dp < 1100f && (p.hp < p.maxHp * 0.5f || (b.level >= 3 && dp < 600f))) cast(b, 3, ang, 0f, false)
             if (dp < 540f) basicAttack(b, p)
         } else {
-            var front = W - 900f
+            var front = W - 1200f
             for (m in minions) if (!m.dead && m.team == 1) front = min(front, m.x)
             val destX = max(minX, front + 260f)
             val tg = nearest(b.x, b.y, b.team, CH_RANGE, -50f)
             if (tg != null) basicAttack(b, tg)
             val dx = destX - b.x
-            if (abs(dx) > 40f) moveU(b, dx, CY - b.y, 235f, dt)
+            if (abs(dx) > 40f) moveU(b, dx, CY - b.y, 295f, dt)
         }
     }
 
@@ -564,7 +564,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         if (tg != null) {
             val dist = hypot(tg.x - m.x, tg.y - m.y) - tg.r
             if (dist > range) {
-                moveU(m, tg.x - m.x, tg.y - m.y, 115f, dt)
+                moveU(m, tg.x - m.x, tg.y - m.y, 140f, dt)
             } else {
                 m.face = atan2(tg.y - m.y, tg.x - m.x)
                 if (m.atkCd <= 0f) {
@@ -579,8 +579,8 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 }
             }
         } else {
-            val nxX = if (m.team == 0) W - 300f else 300f
-            moveU(m, nxX - m.x, (CY - m.y) * 0.5f, 115f, dt)
+            val nxX = if (m.team == 0) W - 380f else 380f
+            moveU(m, nxX - m.x, (CY - m.y) * 0.5f, 140f, dt)
         }
     }
 
@@ -726,7 +726,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
 
     internal fun updateCam() {
-        camX = pl.x.coerceIn(760f, W - 760f)
+        camX = pl.x.coerceIn(1000f, W - 1000f)
         var sx = 0f
         var sz = 0f
         if (shake > 0f) {
@@ -734,10 +734,10 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             sz = (rnd.nextFloat() - 0.5f) * 16f * min(1f, shake)
         }
         val aspect = if (height > 0) width.toFloat() / height.toFloat() else 2f
-        Matrix.perspectiveM(projM, 0, 45f, aspect, 120f, 4600f)
-        Matrix.setLookAtM(viewM, 0, camX + sx, 560f, CY + 400f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
+        Matrix.perspectiveM(projM, 0, 45f, aspect, 150f, 7000f)
+        Matrix.setLookAtM(viewM, 0, camX + sx, 900f, CY + 620f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
         Matrix.multiplyMM(vp, 0, projM, 0, viewM, 0)
-        viewW = 570f * aspect
+        viewW = 930f * aspect
     }
 
     private val viewM = FloatArray(16)

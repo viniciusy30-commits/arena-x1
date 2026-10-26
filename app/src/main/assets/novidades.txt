@@ -1,7 +1,7 @@
-#id 2026-10-26-b
-#titulo Arena X1 agora em 3D
-- Mapa 3D com relevo, rio, ponte, selva e bases
-- Lux, minions e torres modelados em 3D com animações
-- Câmera inclinada estilo LoL que segue a campeã
-- Magias com brilho, laser gigante e zona de lentidão em 3D
-- Barras de vida e números de dano seguem os personagens
+#id 2026-10-26-c
+#titulo Mapa gigante e visual refinado
+- Mapa bem maior, no estilo ARAM, com pilares e muretas na lane
+- Câmera mais afastada para ver mais do combate
+- Lux com saia em pétalas, fita, faíscas orbitando e sigilo ao conjurar
+- Magias redesenhadas: laço em hélice, zona com estrela e pilares, laser com anéis de energia
+- Escudo com cúpula brilhante e velocidades ajustadas ao novo mapa

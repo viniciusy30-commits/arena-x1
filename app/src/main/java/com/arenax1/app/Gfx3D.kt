@@ -322,7 +322,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 col = col * lc;
             }
             vC = vec4(col, aC.a);
-            vFog = clamp((gl_Position.w - 1300.0) / 2400.0, 0.0, 1.0);
+            vFog = clamp((gl_Position.w - 1900.0) / 3200.0, 0.0, 1.0);
         }
     """.trimIndent()
 
@@ -394,7 +394,7 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
             GLES20.glDepthMask(true)
             GLES20.glDisable(GLES20.GL_BLEND)
             for (s in statics) {
-                if (s.x1 < cx - 2400f || s.x0 > cx + 2400f) continue
+                if (s.x1 < cx - 3400f || s.x0 > cx + 3400f) continue
                 GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, s.vbo)
                 attribs()
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, s.count)

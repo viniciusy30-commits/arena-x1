@@ -35,6 +35,9 @@ class Batch {
     /** 0 = automático (alpha<1 vai para translúcido), 2 = aditivo. */
     var mode = 0
 
+    /** Lote dinâmico: limita a resolução das formas para ganhar desempenho. */
+    var lod = false
+
     private val stack = Array(40) { FloatArray(16) }
     private var sp = 0
     private val m: FloatArray get() = stack[sp]
@@ -149,10 +152,12 @@ class Batch {
     }
 
     /** Cilindro/cone vertical: base em y0 com raio r0, topo em y0+h com raio r1. */
-    fun cyl(cx: Float, y0: Float, cz: Float, r0: Float, r1: Float, h: Float, col: Int, seg: Int = 8, a: Float = 1f, lit: Boolean = true) {
+    fun cyl(cx: Float, y0: Float, cz: Float, r0: Float, r1: Float, h: Float, col: Int, seg0: Int = 8, a: Float = 1f, lit: Boolean = true) {
+        val seg = if (lod && seg0 > 16) 16 else seg0
         setCol(col, a)
         val y1 = y0 + h
         val slope = (r0 - r1) / (if (h == 0f) 1f else h)
+        val smooth = seg >= 7 && lit
         for (i in 0 until seg) {
             val a0 = (i.toFloat() / seg * 2f * PI).toFloat()
             val a1 = ((i + 1).toFloat() / seg * 2f * PI).toFloat()
@@ -161,10 +166,25 @@ class Batch {
             val nx = cos(am); val nz = sin(am)
             val ny = slope
             if (r1 > 0.01f) {
-                quad(cx + c0 * r0, y0, cz + s0 * r0, cx + c1 * r0, y0, cz + s1 * r0,
-                    cx + c1 * r1, y1, cz + s1 * r1, cx + c0 * r1, y1, cz + s0 * r1, nx, ny, nz, lit)
+                if (smooth) {
+                    val ax = cx + c0 * r0; val az = cz + s0 * r0
+                    val bx = cx + c1 * r0; val bz = cz + s1 * r0
+                    val ex = cx + c1 * r1; val ez = cz + s1 * r1
+                    val dx = cx + c0 * r1; val dz = cz + s0 * r1
+                    vx(ax, y0, az, c0, ny, s0); vx(bx, y0, bz, c1, ny, s1); vx(ex, y1, ez, c1, ny, s1)
+                    vx(ax, y0, az, c0, ny, s0); vx(ex, y1, ez, c1, ny, s1); vx(dx, y1, dz, c0, ny, s0)
+                } else {
+                    quad(cx + c0 * r0, y0, cz + s0 * r0, cx + c1 * r0, y0, cz + s1 * r0,
+                        cx + c1 * r1, y1, cz + s1 * r1, cx + c0 * r1, y1, cz + s0 * r1, nx, ny, nz, lit)
+                }
             } else {
-                tri(cx + c0 * r0, y0, cz + s0 * r0, cx + c1 * r0, y0, cz + s1 * r0, cx, y1, cz, nx, ny, nz, lit)
+                if (smooth) {
+                    vx(cx + c0 * r0, y0, cz + s0 * r0, c0, ny, s0)
+                    vx(cx + c1 * r0, y0, cz + s1 * r0, c1, ny, s1)
+                    vx(cx, y1, cz, nx, ny, nz)
+                } else {
+                    tri(cx + c0 * r0, y0, cz + s0 * r0, cx + c1 * r0, y0, cz + s1 * r0, cx, y1, cz, nx, ny, nz, lit)
+                }
             }
             if (r1 > 0.01f) tri(cx, y1, cz, cx + c0 * r1, y1, cz + s0 * r1, cx + c1 * r1, y1, cz + s1 * r1, 0f, 1f, 0f, lit)
             if (r0 > 0.01f) tri(cx, y0, cz, cx + c0 * r0, y0, cz + s0 * r0, cx + c1 * r0, y0, cz + s1 * r0, 0f, -1f, 0f, lit)
@@ -172,7 +192,9 @@ class Batch {
     }
 
     /** Elipsoide centrado em (cx,cy,cz) com raios (rx,ry,rz). */
-    fun sphere(cx: Float, cy: Float, cz: Float, rx: Float, ry: Float, rz: Float, col: Int, a: Float = 1f, lit: Boolean = true, sl: Int = 8, st: Int = 5) {
+    fun sphere(cx: Float, cy: Float, cz: Float, rx: Float, ry: Float, rz: Float, col: Int, a: Float = 1f, lit: Boolean = true, sl0: Int = 8, st0: Int = 5) {
+        val sl = if (lod && sl0 > 16) 16 else sl0
+        val st = if (lod && st0 > 10) 10 else st0
         setCol(col, a)
         for (i in 0 until st) {
             val p0 = (-PI / 2.0 + PI * i / st).toFloat()
@@ -265,7 +287,7 @@ class StaticMesh(val vbo: Int, val count: Int, val x0: Float, val x1: Float)
 /** Escolhe a melhor configuração EGL: MSAA e profundidade 24 se existirem. */
 class MsaaChooser : GLSurfaceView.EGLConfigChooser {
     override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
-        for (samples in intArrayOf(4, 2, 0)) {
+        for (samples in intArrayOf(2, 0)) {
             for (depth in intArrayOf(24, 16)) {
                 val spec = if (samples > 0) intArrayOf(
                     EGL10.EGL_RED_SIZE, 8, EGL10.EGL_GREEN_SIZE, 8, EGL10.EGL_BLUE_SIZE, 8,
@@ -288,9 +310,9 @@ class MsaaChooser : GLSurfaceView.EGLConfigChooser {
     }
 }
 
-const val SKY_R = 0.50f
-const val SKY_G = 0.68f
-const val SKY_B = 0.84f
+const val SKY_R = 0.36f
+const val SKY_G = 0.50f
+const val SKY_B = 0.70f
 
 class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
 
@@ -341,11 +363,11 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
                 vec3 V = normalize(uCam - aP);
                 float ndl = dot(n, L);
                 float band = smoothstep(-0.05, 0.6, ndl);
-                vec3 amb = mix(vec3(0.36, 0.33, 0.31), vec3(0.60, 0.68, 0.86), n.y * 0.5 + 0.5);
+                vec3 amb = mix(vec3(0.26, 0.29, 0.40), vec3(0.58, 0.68, 0.92), n.y * 0.5 + 0.5);
                 float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);
                 vec3 H = normalize(L + V);
                 float spec = pow(max(dot(n, H), 0.0), 36.0) * 0.32;
-                vec3 lc = amb * 0.84 + band * vec3(0.68, 0.60, 0.44) + rim * vec3(0.18, 0.23, 0.34);
+                vec3 lc = amb * 0.86 + band * vec3(0.78, 0.68, 0.50) + rim * vec3(0.20, 0.28, 0.42);
                 col = col * lc + spec * vec3(1.0, 0.96, 0.86);
             }
             vC = vec4(col, aC.a);
@@ -361,7 +383,8 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         void main() {
             vec3 c = mix(vC.rgb, uFog, vFog);
             float lum = dot(c, vec3(0.299, 0.587, 0.114));
-            c = mix(vec3(lum), c, 1.14);
+            c = mix(vec3(lum), c, 1.18);
+            c = (c - 0.5) * 1.06 + 0.5;
             gl_FragColor = vec4(c, vC.a);
         }
     """.trimIndent()
@@ -415,37 +438,42 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(prog)
         GLES20.glEnableVertexAttribArray(aP)
+
         GLES20.glEnableVertexAttribArray(aN)
         GLES20.glEnableVertexAttribArray(aC)
-        synchronized(g.lock) {
+        // só montar a cena fica sob a trava; o desenho na GPU roda livre
+        val b = synchronized(g.lock) {
             GLES20.glUniformMatrix4fv(uVP, 1, false, g.vp, 0)
             GLES20.glUniform3f(uFog, SKY_R, SKY_G, SKY_B)
             GLES20.glUniform3f(uCam, g.camPos[0], g.camPos[1], g.camPos[2])
             GLES20.glUniform1f(uOut, 0f)
-            val b = g.scene.frame()
-            val cx = g.camX
-            // terreno e cenário fixo (por pedaços visíveis)
-            GLES20.glDepthMask(true)
-            GLES20.glDisable(GLES20.GL_BLEND)
-            for (s in statics) {
-                if (s.x1 < cx - 3400f || s.x0 > cx + 3400f) continue
-                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, s.vbo)
-                attribs()
-                GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, s.count)
-            }
-            GLES20.glUniform1f(uOut, 1.9f)
-            drawBuf(b.opq)
-            GLES20.glUniform1f(uOut, 0f)
-            drawBuf(b.opq)
-            GLES20.glEnable(GLES20.GL_BLEND)
-            GLES20.glDepthMask(false)
-            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-            drawBuf(b.alp)
-            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE)
-            drawBuf(b.add)
-            GLES20.glDepthMask(true)
-            GLES20.glDisable(GLES20.GL_BLEND)
+            g.scene.frame()
         }
+        val cx = g.camX
+        GLES20.glDepthMask(true)
+        GLES20.glDisable(GLES20.GL_BLEND)
+        for (s in statics) {
+            if (s.x1 < cx - 3400f || s.x0 > cx + 3400f) continue
+            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, s.vbo)
+            attribs()
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, s.count)
+        }
+        if (b.opq.n > 0) {
+            upload(b.opq)
+            GLES20.glUniform1f(uOut, 1.9f)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, b.opq.n / 10)
+            GLES20.glUniform1f(uOut, 0f)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, b.opq.n / 10)
+        }
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glDepthMask(false)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        drawBuf(b.alp)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE)
+        drawBuf(b.add)
+
+        GLES20.glDepthMask(true)
+        GLES20.glDisable(GLES20.GL_BLEND)
     }
 
     private fun attribs() {
@@ -456,6 +484,11 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
 
     private fun drawBuf(b: VBuf) {
         if (b.n <= 0) return
+        upload(b)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, b.n / 10)
+    }
+
+    private fun upload(b: VBuf) {
         if (fb.capacity() < b.n) {
             fb = ByteBuffer.allocateDirect(4 * (b.n + 20000)).order(ByteOrder.nativeOrder()).asFloatBuffer()
         }
@@ -465,7 +498,6 @@ class GlRenderer(private val g: GameView) : GLSurfaceView.Renderer {
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, dynVbo)
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, b.n * 4, fb, GLES20.GL_STREAM_DRAW)
         attribs()
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, b.n / 10)
     }
 
     /** Envia um lote estático (terreno, árvores) para a GPU. */

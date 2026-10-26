@@ -36,32 +36,33 @@ fun vnoise(x: Float, z: Float): Float {
 
 const val MAP_W = 7200f
 
-/** Moitas da lane (x, z, raio): esconderijo estilo ARAM, nas bordas e ao lado da ponte. */
-val BRUSHES: List<FloatArray> by lazy {
-    val l = ArrayList<FloatArray>()
-    val xs = floatArrayOf(MAP_W * 0.20f, MAP_W * 0.30f, MAP_W * 0.41f, MAP_W / 2f - 340f,
-        MAP_W / 2f + 340f, MAP_W * 0.59f, MAP_W * 0.70f, MAP_W * 0.80f)
-    for (x in xs) for (z in floatArrayOf(305f, 975f)) l.add(floatArrayOf(x, z, 85f))
-    l
+/** Sem moitas nesta arena: a vegetação é só decoração de borda. (Lista mantida vazia para o esconderijo poder voltar.) */
+val BRUSHES: List<FloatArray> = emptyList()
+
+/** Meia-largura da ponte (até a borda externa da pedra): mais larga nas bases, uniforme no resto. */
+fun laneHalf(x: Float): Float {
+    val e = min(x, MAP_W - x)
+    val k = ((e - 650f) / 420f).coerceIn(0f, 1f)
+    val s = k * k * (3f - 2f * k)
+    return 470f - 70f * s
 }
 
-/** Altura do chão no ponto (x, z). z do mundo = y do jogo. */
+/** Limites de movimento: encostam na face interna dos parapeitos. */
+fun laneT(x: Float): Float = 640f - laneHalf(x) + 34f
+fun laneB(x: Float): Float = 640f + laneHalf(x) - 34f
+
+/** Altura do chão no ponto (x, z). z do mundo = y do jogo. Ponte plana; fora dela, abismo e paredões. */
 fun groundH(x: Float, z: Float): Float {
-    val d = if (z < 170f) 170f - z else if (z > 1110f) z - 1110f else 0f
-    var h = 0f
-    if (d > 0f) {
-        val k = min(1f, d / 80f)
-        val s = k * k * (3f - 2f * k)
-        val k2 = min(1f, d / 260f)
-        h = s * 62f + vnoise(x * 0.012f, z * 0.012f) * 38f * k2 + vnoise(x * 0.05f, z * 0.05f) * 6f * k
-    }
-    val dx = abs(x - MAP_W / 2f)
-    if (dx < 180f) {
-        val k = 1f - dx / 180f
-        val dip = k * k * (3f - 2f * k)
-        val onBridge = z > 265f && z < 1015f
-        h = if (onBridge) 0.8f else h - dip * 9f
-    }
+    val hw = laneHalf(x)
+    val dz = abs(z - 640f)
+    val ex = if (x < -40f) -40f - x else if (x > MAP_W + 40f) x - MAP_W - 40f else 0f
+    val o = max(dz - hw, ex)
+    if (o <= 0f) return 0f
+    val k = min(1f, o / 46f)
+    var h = -k * (2f - k) * 330f
+    val w = ((o - 160f) / 300f).coerceIn(0f, 1f)
+    h += w * w * (3f - 2f * w) * 520f
+    h += (vnoise(x * 0.012f, z * 0.012f) - 0.5f) * 70f * k * (0.3f + w) + (vnoise(x * 0.05f, z * 0.05f) - 0.5f) * 14f * k
     return h
 }
 
@@ -71,34 +72,23 @@ private fun rgbI(r: Float, g: Float, b: Float): Int =
 private fun terrainColor(x: Float, z: Float): Int {
     val n = vnoise(x * 0.05f, z * 0.05f)
     val n2 = vnoise(x * 0.012f, z * 0.012f)
-    val d = if (z < 170f) 170f - z else if (z > 1110f) z - 1110f else 0f
+    val hw = laneHalf(x)
+    val dz = abs(z - 640f)
+    val ex = if (x < -40f) -40f - x else if (x > MAP_W + 40f) x - MAP_W - 40f else 0f
+    val o = max(dz - hw, ex)
     var c: Int
-    if (d > 0f) {
-        val rock = rgbI(58f + n * 34f, 70f + n * 34f, 96f + n * 38f)
-        val snow = rgbI(196f - n * 14f, 214f - n * 10f, 240f)
-        c = mixCol(snow, rock, (d - 14f) / 70f)
-        c = mixCol(c, rgbI(34f + n * 20f, 44f + n * 22f, 70f + n * 26f), ((d - 190f) / 160f).coerceIn(0f, 1f))
-        if (n2 > 0.62f && d > 90f) c = mixCol(c, rgbI(120f, 190f, 230f), 0.35f)
-    } else if (z in 255f..1025f) {
-        c = rgbI(62f + n * 8f, 74f + n * 8f, 100f + n * 8f)
+    if (o <= 0f) {
+        c = rgbI(66f + n * 10f, 78f + n * 10f, 104f + n * 10f)
     } else {
-        val patch = vnoise(x * 0.006f + 40f, z * 0.02f)
-        c = rgbI(176f + n * 12f - n2 * 22f, 196f + n * 10f - n2 * 18f, 232f - n2 * 8f)
-        c = mixCol(c, rgbI(150f, 176f, 212f), patch * 0.35f)
-        if (z in 228f..255f || z in 1025f..1052f) c = mixCol(c, rgbI(120f, 138f, 168f), 0.5f)
-
-    }
-    val dx = abs(x - MAP_W / 2f)
-    if (dx < 190f) {
-        val k = 1f - dx / 190f
-        c = mixCol(c, rgbI(196f, 224f, 244f), min(1f, k * 2.2f))
-        c = mixCol(c, rgbI(78f, 150f, 206f), ((k - 0.42f) * 1.8f).coerceIn(0f, 1f))
+        val h = groundH(x, z)
+        c = rgbI(54f + n * 30f, 66f + n * 30f, 94f + n * 34f)
+        c = mixCol(c, rgbI(24f + n * 10f, 42f + n * 14f, 80f + n * 18f), ((-h - 60f) / 200f).coerceIn(0f, 1f))
+        c = mixCol(c, rgbI(124f, 164f, 208f), (0.2f + n2 * 0.35f) * ((-h - 200f) / 130f).coerceIn(0f, 1f))
+        if (h > 20f) c = mixCol(c, rgbI(206f, 222f, 244f), ((h - 20f) / 90f).coerceIn(0f, 1f))
+        if (o < 50f) c = mixCol(c, rgbI(150f, 190f, 226f), 0.25f * (1f - o / 50f))
     }
     val n3 = vnoise(x * 0.2f + 9f, z * 0.2f)
-    c = shadeCol(c, 0.93f + n3 * 0.14f)
-    // leve tinta de cada time
-    c = if (x < MAP_W / 2f) mixCol(c, rgbI(90f, 140f, 255f), 0.07f) else mixCol(c, rgbI(255f, 100f, 90f), 0.07f)
-    return c
+    return shadeCol(c, 0.93f + n3 * 0.14f)
 }
 
 // ----------------------------------------------------------------------- CENA
@@ -166,298 +156,262 @@ class Scene(private val g: GameView) {
 
         fun chunkOf(x: Float): Batch = chunks[((x - x0) / (cell * perChunk)).toInt().coerceIn(0, nChunks - 1)]
 
-        // árvores da selva
-        var seed = 0
-        for (row in 0 until 3) {
-            for (side in 0..1) {
-                val zb = if (side == 0) 110f - row * 70f else 1170f + row * 70f
-                var ix = 0
-                while (ix < 84) {
-                    val hx = hash2(ix + row * 97, side * 31 + row)
-                    val hz = hash2(ix * 7 + 3, row * 13 + side)
-                    val hs = hash2(ix + 11, row * 5 + side * 77)
-                    seed++
-                    if (hx > 0.12f) {
-                        val x = -400f + ix * 92f + hx * 56f
-                        val z = zb + (hz - 0.5f) * 36f
-                        tree(chunkOf(x), x, groundH(x, z), z, 0.8f + hs * 0.7f, hs)
+        val iceC = cc(0xFF9FD6F2)
+        val snowC = cc(0xFFEAF2FC)
+        val midX = MAP_W / 2f
+        val cyanG = cc(0xFF4FC3F7)
+        val redG = cc(0xFFFF5252)
+        val rockC = cc(0xFF4A566F)
+        fun glowOf(x: Float): Int = if (x < midX) cyanG else redG
+
+        // ---- ponte: fachada lateral, parapeitos (alguns quebrados), runas e gelo pendurado
+        run {
+            var x = -40f
+            var si = 0
+            while (x < MAP_W + 40f) {
+                val xm = x + 30f
+                val bt = chunkOf(xm)
+                val hw = laneHalf(xm)
+                val slope = (laneHalf(xm + 30f) - laneHalf(xm - 30f)) / 60f
+                val rot = Math.toDegrees(atan2(slope, 1f).toDouble()).toFloat()
+                for (sd in intArrayOf(-1, 1)) {
+                    val hs = hash2(si, 300 + sd)
+                    bt.push()
+                    bt.tr(xm, 0f, 640f + sd * (hw - 11f))
+                    bt.rotY(-sd * rot)
+                    bt.box(0f, -45f, 0f, 62f, 90f, 22f, mixCol(stoneD, cc(0xFF3E4A66), 0.35f + hs * 0.25f))
+                    bt.box(0f, -92f, 0f, 62f, 6f, 24f, cc(0xFF2E3850))
+                    if (hs < 0.78f) {
+                        bt.box(0f, 13f, 0f, 58f, 26f, 22f, shadeCol(stone, 0.85f + hs * 0.3f))
+                        if (hs < 0.5f) bt.box(0f, 27.5f, 0f, 56f, 4f, 20f, snowC)
+                        if (hs < 0.3f) bt.box(0f, 14f, -sd * 11.3f, 22f, 2.2f, 0.8f, mixCol(glowOf(xm), stoneD, 0.45f), 1f, false)
+                    } else if (hs < 0.92f) {
+                        bt.box(0f, 5f, 0f, 40f, 10f, 22f, shadeCol(stone, 0.8f))
+                        bt.box(14f, 13f, sd * 3f, 18f, 8f, 16f, stoneD)
                     }
-                    ix++
+                    if (hash2(si, 320 + sd) < 0.4f) {
+                        val len = 22f + hash2(si, 330 + sd) * 46f
+                        bt.cyl(hash2(si, 340 + sd) * 40f - 20f, -92f - len, sd * 6f, 0f, 4.5f, len, iceC, 5)
+                    }
+                    bt.pop()
                 }
+                si++
+                x += 60f
+            }
+            // pilares do abismo sustentando a ponte
+            var px = 300f
+            while (px < MAP_W) {
+                val bt = chunkOf(px)
+                val hw = laneHalf(px)
+                for (sd in intArrayOf(-1, 1)) {
+                    val zc = 640f + sd * (hw - 60f)
+                    bt.cyl(px, -330f, zc, 52f, 34f, 280f, mixCol(stoneD, cc(0xFF2E3A58), 0.5f), 8)
+                    bt.box(px, -46f, zc, 110f, 24f, 70f, stoneD)
+                    bt.sphere(px, -33f, zc, 40f, 5f, 28f, snowC, 1f, true, 6, 3)
+                }
+                px += 600f
             }
         }
-        // flores e pedras no gramado
-        for (i in 0 until 340) {
-            val x = 100f + hash2(i, 1) * (MAP_W - 200f)
-            val z = if (hash2(i, 2) < 0.5f) 175f + hash2(i, 3) * 60f else 1045f + hash2(i, 4) * 60f
-            val kind = hash2(i, 5)
-            val bt = chunkOf(x)
-            val gy = groundH(x, z)
-            if (kind < 0.55f) {
-                val fc = if (kind < 0.2f) cc(0xFF7FDBFF) else if (kind < 0.4f) cc(0xFFFFFFFF) else cc(0xFFB39DDB)
-                bt.cyl(x, gy, z, 0.6f, 0.6f, 5f, cc(0xFF5F7FA8), 4)
-                bt.sphere(x, gy + 6f, z, 2.4f, 1.6f, 2.4f, fc, 1f, true, 6, 3)
-            } else {
-                bt.sphere(x, gy + 3f, z, 7f + hash2(i, 6) * 5f, 4.5f, 6f, cc(0xFFC9D6E8), 1f, true, 6, 4)
+
+        // ---- piso da ponte: lajes de tamanhos variados, rachaduras, neve nas bordas, gelo e runas
+        run {
+            var px = -20f
+            var col = 0
+            while (px < MAP_W + 20f) {
+                val bw = 74f + hash2(col, 41) * 70f
+                val xm = px + bw / 2f
+                val bt = chunkOf(xm)
+                val hw = laneHalf(xm)
+                val ally = xm < midX
+                var zc = 640f - hw + 22f
+                val zEnd = 640f + hw - 22f
+                var row = 0
+                while (zc < zEnd - 8f) {
+                    val d = min(zEnd - zc, 56f + hash2(col, row + 90) * 44f)
+                    val zm = zc + d / 2f
+                    val hsh = hash2(col * 13 + row, 40 + row)
+                    val tint = mixCol(cc(0xFFA3B1C8), if (ally) cc(0xFF9FB8E4) else cc(0xFFE2B0A6), 0.10f)
+                    val cold = mixCol(tint, cc(0xFFC9D8EC), hash2(col, row + 130) * 0.35f)
+                    bt.box(xm, -0.5f + hsh * 0.35f, zm, bw - 2.5f, 2f, d - 2.5f, shadeCol(cold, 0.84f + hsh * 0.3f))
+                    val edgeZone = abs(zm - 640f) > hw - 170f
+                    if (hash2(col, row + 170) < 0.16f) {
+                        bt.push()
+                        bt.tr(xm + (hsh - 0.5f) * bw * 0.3f, 0.9f, zm)
+                        bt.rotY(hsh * 160f)
+                        bt.box(0f, 0f, 0f, bw * 0.6f, 0.3f, 1.6f, cc(0xFF3B465E), 1f, false)
+                        bt.pop()
+                    }
+                    if (edgeZone && hash2(col, row + 210) < 0.45f) {
+                        bt.sphere(xm + (hsh - 0.5f) * bw * 0.4f, 0.9f, zm, bw * 0.34f, 1.6f, d * 0.3f, snowC, 1f, true, 6, 3)
+                    }
+                    if (hash2(col, row + 250) < 0.05f) {
+                        bt.box(xm, 1.1f, zm, bw * 0.8f, 0.4f, d * 0.7f, cc(0xFFB8E6FA), 0.45f, false)
+                    }
+                    if (edgeZone && hash2(col, row + 290) < 0.04f) {
+                        bt.box(xm, 1.1f, zm, 16f, 0.3f, 2f, mixCol(glowOf(xm), stoneD, 0.5f), 1f, false)
+                    }
+                    zc += d
+                    row++
+                }
+                px += bw
+                col++
+            }
+            // círculo rúnico central
+            val bt = chunkOf(midX)
+            bt.ring(midX, 1.2f, 640f, 150f, 158f, cc(0xFF7FB6D6), 1f, false, 48)
+            bt.ring(midX, 1.2f, 640f, 96f, 99f, cc(0xFF6E9ABB), 1f, false, 40)
+            for (k in 0 until 8) {
+                bt.push()
+                bt.tr(midX, 1.3f, 640f)
+                bt.rotY(k * 45f)
+                bt.box(127f, 0f, 0f, 52f, 0.3f, 2.2f, cc(0xFF7FB6D6), 1f, false)
+                bt.pop()
             }
         }
-        // bases
+
+        // ---- postes de luz e mastros ao longo dos parapeitos
+        run {
+            var px = 1100f
+            var idx = 0
+            while (px < MAP_W - 1000f) {
+                val bt = chunkOf(px)
+                val hw = laneHalf(px)
+                val gl = glowOf(px)
+                for (sd in intArrayOf(-1, 1)) {
+                    val pz = 640f + sd * (hw - 24f)
+                    bt.cyl(px, 0f, pz, 10f, 8f, 34f, stoneL, 6)
+                    bt.cyl(px, 34f, pz, 12f, 12f, 4f, stoneD, 6)
+                    bt.sphere(px, 44f, pz, 6f, 7f, 6f, gl, 1f, false, 6, 4)
+                    if (idx % 2 == 0) bt.cyl(px, 38f, pz, 2.2f, 2.2f, 74f, stoneD, 5)
+                }
+                idx++
+                px += 540f
+            }
+        }
+
+        // ---- as duas bases: praça ampla, muralha com portal, bastiões, arco de entrada
         for (team in 0..1) {
+            val dir = if (team == 0) 1f else -1f
+            val bx = if (team == 0) 0f else MAP_W
             val cx = if (team == 0) 380f else MAP_W - 380f
             val bt = chunkOf(cx)
             val tint = if (team == 0) cc(0xFF4A6FA5) else cc(0xFFA5504A)
-            val glow = if (team == 0) cc(0xFF4FC3F7) else cc(0xFFFF5252)
-            val dir = if (team == 0) -1f else 1f
-            bt.cyl(cx, 0.3f, 640f, 275f, 268f, 3f, mixCol(cc(0xFF6B7080), tint, 0.5f), 36)
-            bt.cyl(cx, 3.3f, 640f, 205f, 200f, 4f, stone, 32)
-            bt.ring(cx, 7.6f, 640f, 150f, 158f, glow, 1f, false, 32)
-            bt.cyl(cx, 7.4f, 640f, 150f, 146f, 1f, stoneD, 32)
+            val glow = if (team == 0) cyanG else redG
+            val accent = if (team == 0) cc(0xFFBDEBFF) else cc(0xFFFFB74D)
+            val wallC = mixCol(cc(0xFF5C6580), tint, 0.18f)
+            bt.cyl(cx, 0.3f, 640f, 312f, 306f, 2.4f, mixCol(cc(0xFF6B7488), tint, 0.4f), 40)
+            bt.cyl(cx, 2.7f, 640f, 232f, 228f, 2.4f, mixCol(stone, tint, 0.25f), 36)
+            bt.ring(cx, 5.3f, 640f, 150f, 160f, glow, 1f, false, 36)
+            bt.ring(cx, 5.4f, 640f, 188f, 192f, accent, 1f, false, 40)
             for (k in 0 until 8) {
-                val a = k * 0.7854f
-                val px = cx + cos(a) * 238f
-                val pz = 640f + sin(a) * 238f
-                bt.cyl(px, 0.5f, pz, 10f, 8f, 52f, stoneL, 8)
-                bt.cyl(px, 52f, pz, 11f, 11f, 5f, stoneD, 8)
-                bt.sphere(px, 62f, pz, 6f, 6f, 6f, glow, 1f, false, 6, 4)
-            }
-            // degraus largos ao redor da plataforma
-            bt.cyl(cx, 0.1f, 640f, 296f, 290f, 2f, mixCol(stoneD, tint, 0.35f), 40)
-            bt.cyl(cx, 1.6f, 640f, 283f, 278f, 2f, mixCol(stone, tint, 0.2f), 40)
-            // piscina de cura luminosa com ondas concêntricas
-            bt.cyl(cx, 7.8f, 640f, 140f, 140f, 0.8f, mixCol(glow, cc(0xFF2A6AA0), 0.45f), 32, 1f, false)
-            for (k in 0 until 4) {
-                bt.ring(cx, 8.8f + k * 0.05f, 640f, 28f + k * 30f, 31f + k * 30f, mixCol(glow, white, 0.55f), 1f, false, 36)
-            }
-            bt.sphere(cx, 10f, 640f, 16f, 5f, 16f, white, 1f, false, 8, 4)
-            // arcos ligando os pilares (abertura voltada para a lane)
-            for (k in 0 until 8) {
-                val open = if (team == 0) (k == 7 || k == 0) else (k == 3 || k == 4)
-                if (open) continue
-                val am = k * 0.7854f + 0.3927f
-                val mx = cx + cos(am) * 238f * cos(0.3927f)
-                val mz = 640f + sin(am) * 238f * cos(0.3927f)
                 bt.push()
-                bt.tr(mx, 0f, mz)
-                bt.rotY(-(Math.toDegrees(am.toDouble()).toFloat() + 90f))
-                bt.box(0f, 57f, 0f, 182f, 8f, 12f, stoneL)
-                bt.box(0f, 52.5f, 0f, 170f, 1.8f, 7f, glow, 1f, false)
-                bt.sphere(0f, 66f, 0f, 7f, 8f, 7f, glow, 1f, false, 7, 4)
+                bt.tr(cx, 5.2f, 640f)
+                bt.rotY(k * 45f)
+                bt.box(250f, 0f, 0f, 100f, 0.3f, 3.4f, mixCol(glow, stoneD, 0.35f), 1f, false)
                 bt.pop()
             }
-            // espiras de cristal atrás da base
-            val bx = cx + dir * 330f
-            crystals(chunkOf(bx), bx, 640f - 150f, 2.3f, glow, team * 7 + 1)
-            crystals(chunkOf(bx - dir * 40f), bx - dir * 40f, 640f + 150f, 2.0f, glow, team * 7 + 2)
-            crystals(chunkOf(bx + dir * 20f), bx + dir * 20f, 640f, 2.8f, glow, team * 7 + 3)
-        }
-        // ponte
-        run {
-            val cx = MAP_W / 2f
-            val bt = chunkOf(cx)
-            bt.box(cx, -1.8f, 640f, 380f, 5.2f, 750f, cc(0xFFA9B6C8))
-            var px = cx - 180f
-            while (px <= cx + 180f) {
-                bt.box(px, 0.9f, 640f, 2f, 0.4f, 738f, cc(0xFF6F7C92))
-                px += 36f
+            bt.cyl(cx, 3f, 640f, 70f, 66f, 6f, stoneD, 20)
+            // muralha do fundo
+            val wx = bx + dir * 22f
+            bt.box(wx, 85f, 640f, 64f, 170f, 1000f, wallC)
+            bt.box(wx + dir * 30f, 8f, 640f, 8f, 16f, 1000f, stoneD)
+            for (k in 0 until 26) {
+                val zz = 150f + k * 39f
+                if (k % 2 == 0) {
+                    bt.box(wx, 183f, zz, 62f, 26f, 22f, wallC)
+                    bt.box(wx, 197.5f, zz, 60f, 3f, 20f, snowC)
+                }
+                if (k % 3 == 1) {
+                    val len = 14f + hash2(k, 500 + team) * 30f
+                    bt.cyl(wx + dir * 32f, 170f - len, zz, 0f, 3.5f, len, iceC, 5)
+                }
             }
+            // portal
+            bt.box(wx + dir * 31f, 45f, 640f, 4f, 90f, 90f, cc(0xFF0B1426), 1f, false)
+            for (sd in intArrayOf(-1, 1)) bt.box(wx + dir * 31f, 50f, 640f + sd * 55f, 14f, 100f, 20f, stoneL)
+            bt.box(wx + dir * 31f, 105f, 640f, 14f, 16f, 130f, stoneL)
+            bt.sphere(wx + dir * 40f, 118f, 640f, 9f, 9f, 9f, glow, 1f, false, 8, 5)
+            // bastiões redondos nos cantos
             for (sd in intArrayOf(-1, 1)) {
-                val zz = 640f + sd * 371f
-                bt.box(cx, 8f, zz, 380f, 12f, 8f, cc(0xFFC3D0E2))
-                var qx = cx - 180f
-                while (qx <= cx + 180f) {
-                    bt.box(qx, 12f, zz, 14f, 22f, 14f, cc(0xFFDCE6F4))
-                    bt.sphere(qx, 25f, zz, 5f, 4f, 5f, cc(0xFF8FE3FF), 1f, false, 6, 3)
-                    qx += 90f
-                }
+                val tx = bx + dir * 10f
+                val tz = 640f + sd * 500f
+                bt.cyl(tx, -90f, tz, 72f, 66f, 90f, stoneD, 12)
+                bt.cyl(tx, 0f, tz, 64f, 58f, 220f, wallC, 12)
+                bt.cyl(tx, 150f, tz, 66f, 66f, 10f, stoneD, 12)
+                bt.cyl(tx, 220f, tz, 74f, 0f, 96f, mixCol(tint, cc(0xFF2A3550), 0.5f), 12)
+                bt.cyl(tx, 262f, tz, 44f, 0f, 54f, snowC, 12)
+                bt.cyl(tx, 316f, tz, 2.5f, 2.5f, 60f, stoneD, 6)
+                bt.box(tx + dir * 60f, 130f, tz, 3f, 26f, 9f, glow, 1f, false)
             }
-        }
-        run {
-            val cx = MAP_W / 2f
-            val bt = chunkOf(cx)
-            for (e in intArrayOf(-1, 1)) {
-                val ax = cx + e * 196f
-                for (sd in intArrayOf(-1, 1)) {
-                    bt.cyl(ax, 0f, 640f + sd * 371f, 15f, 12f, 86f, stoneL, 10)
-                    bt.cyl(ax, 86f, 640f + sd * 371f, 17f, 17f, 6f, stoneD, 10)
-                    bt.sphere(ax, 100f, 640f + sd * 371f, 8f, 10f, 8f, cc(0xFF8FE3FF), 1f, false, 8, 5)
-                }
-                bt.box(ax, 80f, 640f, 14f, 9f, 756f, stoneL)
-                bt.box(ax, 75f, 640f, 8f, 2f, 740f, cc(0xFF8FE3FF), 1f, false)
-            }
+            // arco de entrada da base
+            val arcx = bx + dir * 900f
+            val ahw = laneHalf(arcx) - 30f
             for (sd in intArrayOf(-1, 1)) {
-                bt.box(cx, 1.3f, 640f + sd * 260f, 360f, 0.3f, 3f, cc(0xFF8FE3FF), 1f, false)
-                bt.box(cx, 1.3f, 640f + sd * 130f, 360f, 0.3f, 2f, cc(0xFF8FE3FF), 1f, false)
+                bt.cyl(arcx, 0f, 640f + sd * ahw, 24f, 20f, 150f, stoneL, 10)
+                bt.box(arcx, 150f, 640f + sd * ahw, 60f, 14f, 60f, stoneD)
+                bt.sphere(arcx, 166f, 640f + sd * ahw, 8f, 8f, 8f, glow, 1f, false, 6, 4)
             }
-            for (k in 0 until 44) {
-                for (sd in intArrayOf(-1, 1)) {
-                    val x = cx - 188f + k * 8.6f + hash2(k, 140 + sd) * 4f
-                    val h = 10f + hash2(k, 150 + sd) * 34f
-                    bt.cyl(x, -5f - h, 640f + sd * 377f, 0f, 2.6f, h, cc(0xFFC9ECFF), 5)
-                }
-            }
+            bt.box(arcx, 166f, 640f, 40f, 22f, 2f * ahw + 40f, stone)
+            bt.box(arcx, 154f, 640f, 10f, 2f, 2f * ahw, glow, 1f, false)
+            bt.sphere(arcx, 188f, 640f, 10f, 12f, 10f, accent, 1f, false, 8, 5)
+            // cristais ladeando o núcleo
+            crystals(bt, wx + dir * 120f, 640f - 270f, 1.6f, glow, team * 7 + 1)
+            crystals(bt, wx + dir * 120f, 640f + 270f, 1.6f, glow, team * 7 + 2)
         }
-        // lajotas da lane (pedras individuais com junta escura)
+
+        // ---- abismo: espirais de rocha com topo nevado
         run {
-            var px = 0f
-            var col = 0
-            while (px < MAP_W) {
-                if (abs(px + 32f - MAP_W / 2f) > 235f) {
-                    val bt = chunkOf(px)
-                    val ally = px < MAP_W / 2f
-                    for (row in 0 until 11) {
-                        val zc = 280f + row * 70f
-                        val hsh = hash2(col, row + 40)
-                        val shade = 0.86f + hsh * 0.26f
-                        val base = cc(0xFFA9B6CC)
-                        val tint = mixCol(base, if (ally) cc(0xFF9DB6E0) else cc(0xFFE0A9A2), 0.16f)
-                        val off = if (row % 2 == 0) 0f else 32f
-                        bt.box(px + off + 32f, -0.5f + hsh * 0.25f, zc, 62f, 2f, 62f, shadeCol(tint, shade))
-                    }
-                }
-                px += 64f
-                col++
-            }
-            // meio-fio dourado e linha de energia no centro
-            var qx = 0f
-            while (qx < MAP_W) {
-                if (abs(qx + 70f - MAP_W / 2f) > 275f) {
-                    val bt = chunkOf(qx)
-                    val gl = if (qx < MAP_W / 2f) cc(0xFF4FC3F7) else cc(0xFFFF6B5E)
-                    for (sd in intArrayOf(-1, 1)) {
-                        bt.box(qx + 70f, 2f, 640f + sd * 375f, 140f, 5f, 9f, cc(0xFF8C9AB2))
-                        bt.box(qx + 70f, 4.6f, 640f + sd * 375f, 140f, 0.8f, 3f, gl)
-                    }
-                    bt.box(qx + 70f, 0.8f, 640f, 70f, 0.4f, 3.5f, gl, 1f, false)
-                }
-                qx += 140f
-            }
-        }
-        // capim, arbustos, rochas e cristais
-        run {
-            for (i in 0 until 1100) {
-                val x = 60f + hash2(i, 61) * (MAP_W - 120f)
-                val top = hash2(i, 62) < 0.5f
-                val z = if (top) 170f + hash2(i, 63) * 70f else 1040f + hash2(i, 64) * 70f
-                if (abs(x - MAP_W / 2f) < 200f) continue
+            for (i in 0 until 170) {
+                val x = -300f + hash2(i, 401) * (MAP_W + 600f)
+                val side = if (hash2(i, 402) < 0.5f) -1 else 1
+                val z = 640f + side * (laneHalf(x) + 70f + hash2(i, 403) * 320f)
+                val base = groundH(x, z)
+                val cap = if (side > 0) 90f else 260f
+                val top = -60f + hash2(i, 404) * (cap + 60f)
+                val h = max(60f, top - base)
+                val r = 30f + hash2(i, 405) * 50f
                 val bt = chunkOf(x)
-                val gy = groundH(x, z)
-                val gc = mixCol(cc(0xFF7FA3C9), cc(0xFFDDEBFA), hash2(i, 65))
-                for (k in 0 until 3) {
-                    bt.cyl(x + k * 2.4f - 2.4f, gy, z + (k % 2) * 2f, 1.5f, 0f, 8f + hash2(i, 66 + k) * 8f, gc, 4)
-                }
-            }
-            for (i in 0 until 46) {
-                val x = 500f + hash2(i, 81) * (MAP_W - 1000f)
-                if (abs(x - MAP_W / 2f) < 330f) continue
-                val z = if (hash2(i, 82) < 0.5f) 150f + hash2(i, 83) * 70f else 1050f + hash2(i, 84) * 70f
-                rock(chunkOf(x), x, z, 18f + hash2(i, 85) * 10f, i + 300, true)
-            }
-            for (i in 0 until 70) {
-                val x = 100f + hash2(i, 111) * (MAP_W - 200f)
-                val side = hash2(i, 112) < 0.5f
-                val z = if (side) 30f + hash2(i, 113) * 120f else 1130f + hash2(i, 114) * 120f
-                val bt = chunkOf(x)
-                rock(bt, x, z, 26f + hash2(i, 115) * 28f, i + 600, true)
-                if (hash2(i, 117) < 0.3f) {
-                    val cr = if (x < MAP_W / 2f) cc(0xFF5BC8FF) else cc(0xFFFF7BC6)
-                    crystals(bt, x + 40f, z + 12f, 0.7f + hash2(i, 118) * 0.6f, cr, i + 900)
-                }
-            }
-            // montanhas ao fundo (horizonte)
-            for (i in 0 until 46) {
-                val x = -300f + i * 175f + hash2(i, 121) * 80f
-                for (side in 0..1) {
-                    val z = if (side == 0) -300f - hash2(i, 122 + side) * 260f else 1580f + hash2(i, 124 + side) * 260f
-                    val h = 330f + hash2(i, 126 + side) * 360f
-                    val r = 190f + hash2(i, 128 + side) * 150f
-                    val bt = chunkOf(x)
-                    val rc = mixCol(cc(0xFF4A5778), cc(0xFF7388B0), hash2(i, 130 + side))
-                    bt.cyl(x, -10f, z, r, 0f, h, rc, 7)
-                    bt.cyl(x, h * 0.72f - 10f, z, r * 0.3f, 0f, h * 0.3f, cc(0xFFF1F4FA), 7)
-                }
+                bt.cyl(x, base - 6f, z, r, r * 0.12f, h, mixCol(rockC, cc(0xFF8FA2C6), hash2(i, 406) * 0.5f), 7)
+                bt.cyl(x, base - 6f + h * 0.75f, z, r * 0.36f, 0f, h * 0.25f + 6f, snowC, 7)
             }
         }
-        // pilares luminosos nas bordas da lane + muretas (estilo ARAM)
+
+        // ---- plataformas antigas em ruínas, com pinheiros congelados, arbustos e musgo
         run {
-            var px = 760f
-            var idx = 0
-            while (px < MAP_W - 700f) {
-                if (abs(px - MAP_W / 2f) > 300f) {
-                    val bt = chunkOf(px)
-                    val ally = px < MAP_W / 2f
-                    val gl = if (ally) cc(0xFF4FC3F7) else cc(0xFFFF5252)
-                    for (sd in intArrayOf(-1, 1)) {
-                        val pz = 640f + sd * 392f
-                        val gy = groundH(px, pz)
-                        bt.cyl(px, gy, pz, 9f, 7f, 30f, stoneL, 6)
-                        bt.cyl(px, gy + 30f, pz, 10f, 10f, 4f, stoneD, 6)
-                        bt.sphere(px, gy + 40f, pz, 5f, 6f, 5f, gl, 1f, false, 6, 4)
-                        if (idx % 2 == 0) bt.box(px + 120f, gy + 6f, pz + sd * 8f, 150f, 12f, 10f, mixCol(stoneD, gl, 0.12f))
-                    }
-                    idx++
-                }
-                px += 240f
-            }
-            // rochas grandes na margem do rio
-            for (k in 0 until 14) {
-                val sd = if (k % 2 == 0) -1 else 1
-                val rx = MAP_W / 2f + sd * (210f + hash2(k, 21) * 40f)
-                val rz = 270f + hash2(k, 22) * 740f
-                val bt = chunkOf(rx)
-                rock(bt, rx, rz, 22f + hash2(k, 23) * 14f, k + 1200, true)
-            }
-        }
-        // moitas nas bordas da lane e ao lado da ponte (esconderijo estilo ARAM)
-        run {
-            var sdx = 0
-            for (bq in BRUSHES) {
-                brush(chunkOf(bq[0]), bq[0], bq[1], bq[2], sdx * 17 + 5)
-                sdx++
-            }
             for (i in 0 until 26) {
-                val x = 200f + hash2(i, 161) * (MAP_W - 400f)
-                if (abs(x - MAP_W / 2f) < 300f) continue
-                val z = if (hash2(i, 162) < 0.5f) 150f else 1130f
-                val cr = if (x < MAP_W / 2f) cc(0xFF5BC8FF) else cc(0xFFFF7BC6)
-                crystals(chunkOf(x), x, z, 0.8f + hash2(i, 163) * 0.9f, cr, i + 1500)
+                val x = 150f + hash2(i, 421) * (MAP_W - 300f)
+                val side = if (i % 2 == 0) -1 else 1
+                val z = 640f + side * (laneHalf(x) + 120f + hash2(i, 422) * 150f)
+                val py = -70f - hash2(i, 423) * 90f
+                val sx = 110f + hash2(i, 424) * 90f
+                val sz = 70f + hash2(i, 425) * 50f
+                val bt = chunkOf(x)
+                bt.box(x, py, z, sx, 22f, sz, stoneD)
+                bt.cyl(x, py - 70f, z, sx * 0.22f, sx * 0.12f, 70f, rockC, 7)
+                bt.box(x, py + 13f, z, sx * 0.96f, 4f, sz * 0.96f, snowC)
+                if (hash2(i, 426) < 0.7f) {
+                    bt.cyl(x + sx * 0.25f, py + 11f, z, 11f, 10f, 30f + hash2(i, 429) * 40f, stoneL, 8)
+                    bt.sphere(x + sx * 0.25f, py + 44f, z, 10f, 3f, 10f, snowC, 1f, true, 6, 3)
+                }
+                if (hash2(i, 427) < 0.5f) tree(bt, x - sx * 0.28f, py + 11f, z, 0.5f, hash2(i, 428))
+                bt.sphere(x - sx * 0.05f, py + 16f, z + sz * 0.2f, 11f, 7f, 9f, snowC, 1f, true, 6, 3)
+                bt.sphere(x + sx * 0.1f, py + 12.5f, z - sz * 0.2f, 14f, 2.2f, 10f, cc(0xFF2F5A58), 1f, true, 6, 3)
             }
         }
-        // paredões de gelo do abismo nas duas bordas, com topos nevados e veios luminosos
+
+        // ---- montanhas distantes em camadas, cada vez mais claras e azuladas
         run {
-            for (i in 0 until 120) {
-                val x = -200f + i * 62f + hash2(i, 201) * 40f
-                for (side in 0..1) {
-                    val z = if (side == 0) 128f - hash2(i, 202 + side) * 30f else 1152f + hash2(i, 204 + side) * 30f
+            for (layer in 0 until 3) {
+                for (i in 0 until 40) {
+                    val x = -600f + i * 205f + hash2(i, 440 + layer) * 90f
+                    val z = -380f - layer * 320f - hash2(i, 450 + layer) * 120f
+                    val h = 520f + layer * 220f + hash2(i, 460 + layer) * 340f
+                    val r = 260f + hash2(i, 470 + layer) * 200f
                     val bt = chunkOf(x)
-                    val h = 90f + hash2(i, 206 + side) * 150f
-                    val r = 26f + hash2(i, 208 + side) * 20f
-                    val gy = groundH(x, z)
-                    val ice = mixCol(cc(0xFF3E5078), cc(0xFF7FA6D6), hash2(i, 210 + side))
-                    bt.cyl(x, gy - 4f, z, r, r * 0.35f, h, ice, 6)
-                    bt.cyl(x, gy + h * 0.8f - 4f, z, r * 0.4f, 0f, h * 0.35f, cc(0xFFCFE2F6), 6)
-                    if (hash2(i, 212 + side) < 0.35f) {
-                        val vz = z + (if (side == 0) 1f else -1f) * r * 0.55f
-                        bt.box(x, gy + h * 0.45f, vz, 3f, h * 0.55f, 3f, cc(0xFF7FE3FF), 1f, false)
-                    }
+                    val rc = mixCol(mixCol(cc(0xFF4E5E86), cc(0xFF9DB3D8), layer / 2f), cc(0xFF6E84AE), hash2(i, 480 + layer) * 0.4f)
+                    bt.cyl(x, -330f, z, r, 0f, h, rc, 7)
+                    bt.cyl(x, -330f + h * 0.7f, z, r * 0.32f, 0f, h * 0.3f + 4f, cc(0xFFF1F4FA), 7)
                 }
-            }
-            // braseiros de gelo ao longo da lane
-            var bx = 900f
-            var bi = 0
-            while (bx < MAP_W - 800f) {
-                if (abs(bx - MAP_W / 2f) > 320f) {
-                    val bt = chunkOf(bx)
-                    val gl = if (bx < MAP_W / 2f) cc(0xFF4FC3F7) else cc(0xFFFF6B5E)
-                    for (sd in intArrayOf(-1, 1)) {
-                        val bz = 640f + sd * 420f
-                        val gy = groundH(bx, bz)
-                        bt.cyl(bx, gy, bz, 7f, 5f, 18f, stoneD, 6)
-                        bt.cyl(bx, gy + 18f, bz, 11f, 13f, 5f, stoneL, 8)
-                        bt.sphere(bx, gy + 27f, bz, 8f, 11f, 8f, gl, 1f, false, 7, 4)
-                    }
-                    bi++
-                }
-                bx += 480f
             }
         }
         for (ci in 0 until nChunks) {
@@ -554,41 +508,69 @@ class Scene(private val g: GameView) {
         val cx = g.camX
         fl = false
 
-        // água do rio
-        val wx = MAP_W / 2f
-        b.box(wx, -3.4f, 640f, 330f, 0.4f, 1700f, cc(0xFF8FD3F0), 0.72f, false)
+        // névoa lenta nas profundezas do abismo
         b.mode = 2
-        for (i in 0 until 9) {
-            val zz = ((i * 190f + t * 38f) % 1700f) - 200f
-            b.box(wx + sin(t + i) * 40f, -3f, zz, 70f + (i % 3) * 30f, 0.3f, 3f, white, 0.35f, false)
+        for (L in 0 until 3) {
+            val my = -70f - L * 105f
+            for (i in 0 until 9) {
+                val mx = cx - 1500f + (((i * 0.618034f + L * 0.37f) % 1f) * 3000f + t * (14f + L * 9f)) % 3000f
+                val side = if (i % 2 == 0) -1 else 1
+                val mz = 640f + side * (470f + ((i * 0.381966f + L * 0.2f) % 1f) * 260f)
+                b.box(mx, my, mz, 520f, 6f, 190f, cc(0xFFAFC8E8), 0.07f + 0.02f * L, false)
+            }
         }
-        b.mode = 0
-
-        // neve caindo
-        b.mode = 2
-        for (i in 0 until 110) {
-            val fx = cx - 1500f + ((i * 0.618034f) % 1f) * 3000f + sin(t * 0.8f + i) * 18f
+        for (i in 0 until 8) {
+            val mx = cx - 1400f + (((i * 0.618034f) % 1f) * 2800f + t * 30f) % 2800f
+            val side = if (i % 2 == 0) -1 else 1
+            b.box(mx, -8f, 640f + side * (laneHalf(mx) + 40f), 300f, 4f, 70f, cc(0xFFC9DCF2), 0.09f, false)
+        }
+        // brilho ocasional de gelo nas bordas da ponte
+        for (i in 0 until 160) {
+            val gx = hash2(i, 701) * MAP_W
+            if (abs(gx - cx) > 1300f) continue
+            val tw = 0.5f + 0.5f * sin(t * 2.4f + i * 1.9f)
+            if (tw < 0.8f) continue
+            val side = if (i % 2 == 0) -1 else 1
+            val gz = 640f + side * (laneHalf(gx) - 44f - hash2(i, 702) * 120f)
+            b.box(gx, 3f, gz, 3.2f, 3.2f, 3.2f, white, (tw - 0.8f) * 5f, false)
+        }
+        // núcleos pulsando
+        for (team in 0..1) {
+            val ncx = if (team == 0) 380f else MAP_W - 380f
+            if (abs(ncx - cx) > 2200f) continue
+            val gl = if (team == 0) cc(0xFF4FC3F7) else cc(0xFFFF5252)
+            val pu = 0.5f + 0.5f * sin(t * 2.2f + team * 1.7f)
+            b.ring(ncx, 5.9f, 640f, 120f + pu * 26f, 130f + pu * 26f, gl, 0.25f + 0.35f * (1f - pu), false, 40)
+            b.disc(ncx, 5.8f, 640f, 112f, gl, 0.10f + 0.08f * pu, false, 32)
+        }
+        // neve soprada em rajadas
+        val gust = 60f + 110f * (0.5f + 0.5f * sin(t * 0.27f))
+        for (i in 0 until 120) {
+            val fx = cx - 1500f + (((i * 0.618034f) % 1f) * 3000f + t * gust) % 3000f
             val fz = g.CY - 900f + ((i * 0.381966f + 0.17f) % 1f) * 1700f
-
-            val spd = 55f + ((i * 0.7548f) % 1f) * 60f
+            val spd = 40f + ((i * 0.7548f) % 1f) * 45f
             val fy = 760f - ((t * spd + i * 61f) % 760f)
             b.box(fx, fy, fz, 2.6f, 2.6f, 2.6f, white, 0.75f, false)
         }
-        // névoa de gelo rasteira sobre a lane e o rio
-        b.mode = 2
-        for (i in 0 until 26) {
-            val mx = cx - 1400f + ((i * 0.618034f) % 1f) * 2800f + sin(t * 0.25f + i) * 60f
-            val mz = 300f + ((i * 0.381966f + 0.3f) % 1f) * 680f
-            b.box(mx, 5f + (i % 3) * 3f, mz, 240f, 4f, 90f, cc(0xFFBFD8F2), 0.10f, false)
-        }
-        // faíscas de gelo subindo do rio
-        for (i in 0 until 24) {
-            val py = ((t * (22f + (i % 5) * 6f) + i * 37f) % 150f)
-            val px = wx + sin(t * 0.7f + i * 1.7f) * 110f
-            val pz = ((i * 71f + t * 30f) % 1100f) + 90f
-            b.box(px, -2f + py, pz, 2.4f, 2.4f, 2.4f, cc(0xFF9FEAFF), 0.7f * (1f - py / 150f), false)
-        }
         b.mode = 0
+        // bandeiras ao vento
+        for (team in 0..1) {
+            val bx = if (team == 0) 0f else MAP_W
+            val dir = if (team == 0) 1f else -1f
+            if (abs(bx - cx) > 2300f) continue
+            val fc = if (team == 0) cc(0xFF3FA8D8) else cc(0xFFD84A3A)
+            for (sd in intArrayOf(-1, 1)) flag(bx + dir * 10f, 366f, 640f + sd * 500f, fc, team * 2f + sd)
+        }
+        var fpx = 1100f
+        var fidx = 0
+        while (fpx < MAP_W - 1000f) {
+            if (fidx % 2 == 0 && abs(fpx - cx) < 1800f) {
+                val fc = if (fpx < MAP_W / 2f) cc(0xFF3FA8D8) else cc(0xFFD84A3A)
+                for (sd in intArrayOf(-1, 1)) flag(fpx, 104f, 640f + sd * (laneHalf(fpx) - 24f), fc, fidx * 0.7f + sd)
+            }
+            fidx++
+            fpx += 540f
+        }
         for (tw in g.towers) {
             if (abs(tw.x - cx) > 2700f) continue
             if (tw.dead) rubble(tw) else tower(tw)
@@ -635,6 +617,13 @@ class Scene(private val g: GameView) {
         b.mode = 0
         aim()
         return b
+    }
+
+    private fun flag(x: Float, y: Float, z: Float, col: Int, ph: Float) {
+        for (k in 0 until 4) {
+            val w = sin(t * 3.2f + ph - k * 0.9f) * (3f + k * 2.2f)
+            b.box(x + 6f + k * 6.5f, y - k * 1.2f, z + w, 6.8f, 13f - k * 1.5f, 1.6f, col, 1f, false)
+        }
     }
 
     private fun place(u: U) {

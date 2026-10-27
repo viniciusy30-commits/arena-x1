@@ -613,6 +613,10 @@ class MainActivity : AppCompatActivity() {
             R.drawable.ic_download, "Instalar o jogo sozinho", "Quando o build terminar, já abre a instalação da nova versão",
             prefs.getBoolean("auto_install", true)
         ) { on -> prefs.edit().putBoolean("auto_install", on).apply(); say(if (on) "Instalação automática ligada" else "Instalação automática desligada") }
+        sh.switchRow(
+            R.drawable.ic_refresh, "Corrigir erro do build sozinho", "Se o build falhar, manda o erro ao Claude, baixa o ZIP corrigido e entrega de novo (até ${AutoFix.MAX} vezes)",
+            prefs.getBoolean("autofix", true)
+        ) { on -> prefs.edit().putBoolean("autofix", on).apply(); say(if (on) "Correção automática ligada" else "Correção automática desligada") }
         sh.row(R.drawable.ic_download, "Verificar atualização", "Procura uma versão nova do app") { Updater.check(this, true) }
         sh.row(R.drawable.ic_info, "O que mudou", "Novidades desta versão") { Novidades.show(this, true) }
         sh.show()
@@ -706,17 +710,28 @@ class MainActivity : AppCompatActivity() {
             say("ZIP salvo. Configure o Token do GitHub em Configurações.", true)
             return
         }
+        autoFix.onZipDownloaded()
+        val guessTab = tabs.getOrNull(cur)?.takeIf { webs[it.id]?.url?.contains("claude.ai") == true }?.id ?: Script.chatTabId
+        val fixTab = autoFix.tabFor(guessTab)
         val popup = BuildPopup(this, proj.name)
         popup.show()
         popup.status("Enviando $zipName → ${proj.name}…")
         Handoff.log(this, proj.id, "ZIP enviado: $zipName")
+        var failLog = ""
         GitHubDelivery.deliver(
             this, proj, zipName, bytes,
             onStatus = { popup.status(it) },
             onSteps = { popup.steps(it) },
+            onFailLog = {
+                failLog = it
+                if (autoFix.enabled()) popup.status("Build falhou ✗ — copiando o erro e mandando para o Claude…")
+            },
             onDone = { ok, url, apk ->
                 Handoff.log(this, proj.id, "$zipName → " + if (ok) "build OK, APK pronto" else "build falhou ou sem APK")
                 popup.done(ok, url, apk)
+                if (ok) autoFix.onBuildOk(proj.id)
+                else if (failLog.isNotBlank()) runOnUiThread { autoFix.start(proj, zipName, failLog, url, fixTab) }
+                else autoFix.cancel()
             }
         )
     }
@@ -990,36 +1005,50 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Espera a página ficar pronta, sem tempo máximo: URL certa (se pedida), carregamento em 100%,
-     * página completa e caixa de mensagem presente em 2 leituras seguidas. Assim que fica pronta, segue.
+     * Espera a página ficar pronta, sem tempo máximo: saiu da página antiga (ou chegou em /new), página completa
+     * e caixa de mensagem presente em leituras seguidas. Assim que fica pronta, segue.
      * Só desiste se o Script for parado (alive() = false).
      */
     internal fun scrWaitReady(w: WebView, urlPart: String?, alive: () -> Boolean, cb: (Boolean) -> Unit) {
         var stable = 0
+        val before = w.url ?: ""
         fun check() {
             if (!alive()) return
-            val urlOk = urlPart == null || (w.url ?: "").contains(urlPart)
+            val u = w.url ?: ""
+            // com urlPart: chegou nela, ou ao menos saiu da página de antes (o Claude pode redirecionar)
+            val urlOk = urlPart == null || u.contains(urlPart) || (u != before && u.contains("claude.ai"))
             val loaded = w.progress >= 100
             w.evaluateJavascript("(function(){return document.readyState==='complete'&&document.querySelector('div[contenteditable=\"true\"]')?'yes':'no';})();") { r ->
                 if (!alive()) return@evaluateJavascript
-                if (urlOk && loaded && r?.contains("yes") == true) stable++ else stable = 0
-                if (stable >= 2) { cb(true); return@evaluateJavascript }
+                if (urlOk && r?.contains("yes") == true) stable++ else stable = 0
+                // carregamento em 100% e 2 leituras boas — ou 8 leituras boas mesmo que o WebView não marque 100%
+                if ((loaded && stable >= 2) || stable >= 8) { cb(true); return@evaluateJavascript }
                 w.postDelayed({ check() }, 400)
             }
         }
         w.postDelayed({ check() }, 400)
     }
 
+    /**
+     * Estado dos anexos na caixa: "yes" (todos na página e sem envio em andamento), "busy" (subindo) ou "no".
+     * A checagem de "subindo" olha só ao redor do próprio anexo, nunca a página toda.
+     */
+    internal fun scrAttachState(w: WebView, names: List<String>, checkBusy: Boolean = true, cb: (String) -> Unit) {
+        val probes = names.map { n -> n.substringBeforeLast('.').let { if (it.length > 20) it.substring(0, 20) else it }.ifBlank { n } }
+        val arr = JSONArray(probes).toString()
+        val js = "(function(ns,cb){var t=document.body.innerText||'';for(var i=0;i<ns.length;i++){if(t.indexOf(ns[i])<0)return 'no';}" +
+            "if(!cb)return 'yes';" +
+            "for(var j=0;j<ns.length;j++){var wk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null);var nd,el=null;" +
+            "while((nd=wk.nextNode())){if(nd.nodeValue&&nd.nodeValue.indexOf(ns[j])>=0&&nd.parentElement){el=nd.parentElement;break;}}" +
+            "var p=el;for(var k=0;k<4&&p&&p.parentElement;k++)p=p.parentElement;" +
+            "if(p&&p.querySelector('[role=progressbar],[aria-busy=true],progress'))return 'busy';}" +
+            "return 'yes';})($arr,$checkBusy);"
+        w.evaluateJavascript(js) { r -> cb(if (r?.contains("yes") == true) "yes" else if (r?.contains("busy") == true) "busy" else "no") }
+    }
+
     /** Os nomes estão na página? (checkBusy: e nenhum envio de arquivo em andamento) */
     internal fun scrAttachedOk(w: WebView, names: List<String>, checkBusy: Boolean = true, cb: (Boolean) -> Unit) {
-        val arr = JSONArray(names.map { if (it.length > 30) it.substring(0, 30) else it }).toString()
-        val busy = if (checkBusy)
-            "var e=document.querySelector('div[contenteditable=\"true\"]');var p=e;for(var k=0;k<6&&p&&p.parentElement;k++)p=p.parentElement;" +
-            "if(p&&p.querySelector('[role=progressbar],.animate-spin,[aria-busy=true]'))return 'busy';"
-        else ""
-        val js = "(function(ns){var t=document.body.innerText||'';for(var i=0;i<ns.length;i++){if(t.indexOf(ns[i])<0)return 'no';}" +
-            busy + "return 'yes';})($arr);"
-        w.evaluateJavascript(js) { r -> cb(r?.contains("yes") == true) }
+        scrAttachState(w, names, checkBusy) { cb(it == "yes") }
     }
 
     /** Lê a página da aba (guarda a conversa e atualiza o limite). cb(leitura, contaEmLimiteAgora). */
@@ -1053,6 +1082,7 @@ class MainActivity : AppCompatActivity() {
     // ───────────── Uso das contas (0–100%) ─────────────
 
     internal val usageMon: UsageMonitor by lazy { UsageMonitor(this) }
+    internal val autoFix: AutoFix by lazy { AutoFix(this) }
 
     private fun usageSub(): String {
         val parts = tabs.mapNotNull { t ->
@@ -1331,15 +1361,21 @@ class MainActivity : AppCompatActivity() {
                 w.evaluateJavascript(Handoff.BUILD_JS.replace("__NAME__", JSONObject.quote(f.name)).replace("__MIME__", JSONObject.quote(mime)), null)
                 val cleanup = { w.evaluateJavascript("window.__hf='';window.__hfDt=null;", null) }
                 tryInject(w, f.name, "input") { ok1 ->
-                    if (ok1) { cleanup(); result(true) }
-                    else tryInject(w, f.name, "drop") { ok2 ->
-                        cleanup()
-                        if (ok2) result(true) else attachWithRetries(to, uri, 1, result)
+                    if (ok1) { cleanup(); attLog("Anexo ${f.name}: entrou pelo campo de arquivo"); result(true) }
+                    else {
+                        attLog("Anexo ${f.name}: campo de arquivo não funcionou; tentando arrastar")
+                        tryInject(w, f.name, "drop") { ok2 ->
+                            cleanup()
+                            if (ok2) { attLog("Anexo ${f.name}: entrou arrastando"); result(true) }
+                            else { attLog("Anexo ${f.name}: arrastar não funcionou; tentando o menu de anexar"); attachWithRetries(to, uri, 1, result) }
+                        }
                     }
                 }
             }
         }.start()
     }
+
+    private fun attLog(s: String) { if (Script.status == Script.RUNNING) Script.log(this, s) }
 
     private fun tryInject(w: WebView, name: String, mode: String, cb: (Boolean) -> Unit) {
         w.evaluateJavascript(Handoff.INJECT_JS.replace("__MODE__", mode), null)
@@ -1414,9 +1450,9 @@ return 'none';})();"""
         }
         w.postDelayed({
             when {
-                pendingClaudeFile == null -> result(true)
+                pendingClaudeFile == null -> { attLog("Anexo: o seletor de arquivos recebeu o ZIP (tentativa $attempt)"); result(true) }
                 attempt < 3 -> attachWithRetries(to, uri, attempt + 1, result)
-                else -> { pendingClaudeFile = null; result(false) }
+                else -> { pendingClaudeFile = null; attLog("Anexo: não consegui por nenhum caminho; vou tentar de novo"); result(false) }
             }
         }, if (attempt == 0) 2000L else 3500L)
     }

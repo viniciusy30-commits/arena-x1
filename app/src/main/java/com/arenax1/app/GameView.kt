@@ -274,13 +274,13 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         if (w > 0 && h > 0) glv.holder.setFixedSize((w * 0.9f).toInt(), (h * 0.9f).toInt())
         val wf = w.toFloat()
         val hf = h.toFloat()
-        bx[4] = wf - 90f * d; by[4] = hf - 85f * d; br[4] = 46f * d
+        bx[4] = wf - 90f * d; by[4] = hf - 85f * d; br[4] = 56f * d
         val ang = floatArrayOf(180f, 145f, 110f, 75f)
         for (i in 0..3) {
             val a = Math.toRadians(ang[i].toDouble()).toFloat()
-            bx[i] = bx[4] + cos(a) * 98f * d
-            by[i] = by[4] - sin(a) * 98f * d
-            br[i] = 30f * d
+            bx[i] = bx[4] + cos(a) * 124f * d
+            by[i] = by[4] - sin(a) * 124f * d
+            br[i] = 39f * d
         }
     }
 
@@ -1309,7 +1309,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         val aspect = if (height > 0) width.toFloat() / height.toFloat() else 2f
         Matrix.perspectiveM(projM, 0, 45f, aspect, 150f, 7000f)
         camPos[0] = camX + sx; camPos[1] = 1200f; camPos[2] = CY + 820f + sz
-        Matrix.setLookAtM(viewM, 0, camX + sx, 1200f, CY + 820f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
+        Matrix.setLookAtM(viewM, 0, camX + sx, 880f, CY + 600f + sz, camX + sx, 0f, CY + sz * 0.5f, 0f, 1f, 0f)
         Matrix.multiplyMM(vp, 0, projM, 0, viewM, 0)
         viewW = 1230f * aspect
     }
@@ -1351,20 +1351,20 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal fun drawWorldUi(c: Canvas) {
         for (tw in towers) {
             if (tw.dead || abs(tw.x - camX) > viewW) continue
-            bar(c, tw, if (tw.nexus) 130f else 80f, if (tw.nexus) 290f else 172f)
+            bar(c, tw, if (tw.nexus) 170f else 105f, if (tw.nexus) 360f else 225f)
         }
         for (m in minions) {
             if (m.dead || abs(m.x - camX) > viewW || hiddenFor(m, 0)) continue
-            bar(c, m, 36f, 76f)
+            bar(c, m, 46f, 96f)
         }
         for (ch in champs) {
             if (ch.dead || hiddenFor(ch, 0)) continue
-            bar(c, ch, 70f, 128f)
-            if (proj(ch.x, groundH(ch.x, ch.y) + 128f, ch.y)) {
+            bar(c, ch, 92f, 170f)
+            if (proj(ch.x, groundH(ch.x, ch.y) + 170f, ch.y)) {
                 tp.textSize = 12f * d
                 tp.textAlign = Paint.Align.CENTER
                 tp.color = C(0xFFFFFFFF)
-                c.drawText("" + ch.level, sp[0] - 41f * sp[2], sp[1] + 8f * d, tp)
+                c.drawText("" + ch.level, sp[0] - 54f * sp[2], sp[1] + 8f * d, tp)
             }
         }
         tp.textAlign = Paint.Align.CENTER
@@ -1673,103 +1673,198 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         }
     }
 
+    private fun glow(c: Canvas, x: Float, y: Float, r: Float, col: Int, a: Int) {
+        pt.style = Paint.Style.FILL
+        for (k in 0..3) {
+            val rr = r * (1f - k * 0.2f)
+            pt.color = ((a * (0.18f + 0.16f * k)).toInt().coerceIn(0, 255) shl 24) or (col and 0xFFFFFF)
+            c.drawCircle(x, y, rr, pt)
+        }
+    }
+
+    private fun bold(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, w: Float, col: Int, a: Int) {
+        st.style = Paint.Style.STROKE
+        st.strokeWidth = w * 1.9f
+        st.color = (a shl 24) or 0x101018
+        c.drawLine(x1, y1, x2, y2, st)
+        st.strokeWidth = w
+        st.color = (a shl 24) or (col and 0xFFFFFF)
+        c.drawLine(x1, y1, x2, y2, st)
+    }
+
+    private fun boldCircle(c: Canvas, x: Float, y: Float, rr: Float, w: Float, col: Int, a: Int) {
+        st.style = Paint.Style.STROKE
+        st.strokeWidth = w * 1.9f
+        st.color = (a shl 24) or 0x101018
+        c.drawCircle(x, y, rr, st)
+        st.strokeWidth = w
+        st.color = (a shl 24) or (col and 0xFFFFFF)
+        c.drawCircle(x, y, rr, st)
+    }
+
+    private fun poly(c: Canvas, pts: FloatArray, col: Int, a: Int, edge: Int) {
+        path.reset()
+        for (i in 0 until pts.size / 2) {
+            if (i == 0) path.moveTo(pts[0], pts[1]) else path.lineTo(pts[i * 2], pts[i * 2 + 1])
+        }
+        path.close()
+        pt.style = Paint.Style.FILL
+        pt.color = (a shl 24) or (col and 0xFFFFFF)
+        c.drawPath(path, pt)
+        st.style = Paint.Style.STROKE
+        st.strokeWidth = 2f * d
+        st.color = (a shl 24) or (edge and 0xFFFFFF)
+        c.drawPath(path, st)
+    }
+
+    private fun sword(c: Canvas, x: Float, y: Float, r: Float, ang: Float, col: Int, hilt: Int, a: Int) {
+        val ca = cos(ang)
+        val sa = sin(ang)
+        fun p(u: Float, v: Float) = floatArrayOf(x + ca * u - sa * v, y + sa * u + ca * v)
+        val pts = ArrayList<Float>()
+        for (q in listOf(p(r * 0.9f, 0f), p(r * 0.15f, r * 0.13f), p(-r * 0.35f, r * 0.13f), p(-r * 0.35f, -r * 0.13f), p(r * 0.15f, -r * 0.13f))) { pts.add(q[0]); pts.add(q[1]) }
+        poly(c, pts.toFloatArray(), col, a, 0xFFFFFF)
+        val g1 = p(-r * 0.4f, -r * 0.45f)
+        val g2 = p(-r * 0.4f, r * 0.45f)
+        bold(c, g1[0], g1[1], g2[0], g2[1], 3.2f * d, hilt, a)
+        val h1 = p(-r * 0.4f, 0f)
+        val h2 = p(-r * 0.85f, 0f)
+        bold(c, h1[0], h1[1], h2[0], h2[1], 3.4f * d, 0x8D6E63, a)
+    }
+
     private fun drawGlyphNew(c: Canvas, hero: Int, i: Int, x: Float, y: Float, r: Float, ready: Boolean) {
-        val a = if (ready) 0xFF else 0x77
+        val a = if (ready) 0xFF else 0x88
+        val pu = 0.5f + 0.5f * sin(t * 4f + i)
         pt.style = Paint.Style.FILL
         st.style = Paint.Style.STROKE
-        if (hero == 2) {
-            when (i) {
+        when (hero) {
+            2 -> when (i) {
                 0 -> {
+                    glow(c, x, y, r * 0.95f, 0xFF2A3A, a)
+                    star(c, x, y, r * 0.82f, r * 0.24f, 4, t * 2.2f)
+                    pt.color = (a shl 24) or 0x2A2A38
+                    c.drawCircle(x, y, r * 0.26f, pt)
                     pt.color = (a shl 24) or 0xFF4A4A
-                    star(c, x, y, r * 0.72f, r * 0.2f, 4, t * 2f)
-                    pt.color = (a shl 24) or 0xFFFFFF
-                    c.drawCircle(x, y, r * 0.1f, pt)
+                    c.drawCircle(x, y, r * 0.13f, pt)
                 }
                 1 -> {
-                    pt.color = (a shl 24) or 0x30203F
-                    c.drawCircle(x, y, r * 0.5f, pt)
-                    st.color = (a shl 24) or 0xB0306A
-                    st.strokeWidth = 2.5f * d
-                    c.drawCircle(x, y, r * 0.5f, st)
-                    pt.color = (a shl 24) or 0xFF4A4A
-                    c.drawCircle(x + r * 0.12f, y - r * 0.08f, r * 0.1f, pt)
-
+                    glow(c, x, y, r * 0.95f, 0x9B2D8F, a)
+                    pt.color = (a shl 24) or 0x14101E
+                    c.drawCircle(x - r * 0.18f, y + r * 0.1f, r * 0.42f, pt)
+                    boldCircle(c, x - r * 0.18f, y + r * 0.1f, r * 0.42f, 2f * d, 0xC03A9A, a)
+                    pt.color = (a shl 24) or 0xFF3A4A
+                    c.drawCircle(x - r * 0.1f, y + r * 0.02f, r * 0.08f, pt)
+                    bold(c, x + r * 0.08f, y - r * 0.12f, x + r * 0.7f, y - r * 0.5f, 3.4f * d, 0xFF6A7A, a)
+                    bold(c, x + r * 0.7f, y - r * 0.5f, x + r * 0.42f, y - r * 0.52f, 3f * d, 0xFF6A7A, a)
+                    bold(c, x + r * 0.7f, y - r * 0.5f, x + r * 0.66f, y - r * 0.22f, 3f * d, 0xFF6A7A, a)
                 }
                 2 -> {
-                    st.color = (a shl 24) or 0xFF6A6A
-                    st.strokeWidth = 3.5f * d
-                    c.drawLine(x - r * 0.5f, y - r * 0.5f, x + r * 0.5f, y + r * 0.5f, st)
-                    c.drawLine(x + r * 0.5f, y - r * 0.5f, x - r * 0.5f, y + r * 0.5f, st)
-                    st.color = (a shl 24) or 0xFFFFFF
-                    st.strokeWidth = 1.5f * d
-                    c.drawCircle(x, y, r * 0.55f, st)
+                    glow(c, x, y, r * 0.95f, 0xFF2A3A, a)
+                    boldCircle(c, x, y, r * 0.62f, 2.4f * d, 0xFFFFFF, a)
+                    bold(c, x - r * 0.55f, y - r * 0.55f, x + r * 0.55f, y + r * 0.55f, 4.2f * d, 0xFF4A5A, a)
+                    bold(c, x + r * 0.55f, y - r * 0.55f, x - r * 0.55f, y + r * 0.55f, 4.2f * d, 0xFF4A5A, a)
                 }
                 else -> {
-                    st.color = (a shl 24) or 0xFF1744
-                    st.strokeWidth = 3f * d
-                    c.drawCircle(x, y, r * 0.5f, st)
-                    c.drawLine(x - r * 0.7f, y, x + r * 0.7f, y, st)
-                    c.drawLine(x, y - r * 0.7f, x, y + r * 0.7f, st)
+                    glow(c, x, y, r * (0.9f + 0.08f * pu), 0xFF1744, a)
+                    boldCircle(c, x, y, r * 0.55f, 3f * d, 0xFF3A4A, a)
+                    for (k in 0..3) {
+                        val an = k * 1.5708f + t
+                        bold(c, x + cos(an) * r * 0.62f, y + sin(an) * r * 0.62f, x + cos(an) * r * 0.92f, y + sin(an) * r * 0.92f, 3.4f * d, 0xFFFFFF, a)
+                    }
                     pt.color = (a shl 24) or 0xFFFFFF
-                    c.drawCircle(x, y, r * 0.12f, pt)
+                    c.drawCircle(x, y, r * 0.16f, pt)
+                    pt.color = (a shl 24) or 0xFF1744
+                    c.drawCircle(x, y, r * 0.09f, pt)
                 }
             }
-        } else {
-            when (i) {
+            3 -> when (i) {
                 0 -> {
-                    pt.color = (a shl 24) or 0xD7DEEA
-                    c.drawRect(x - r * 0.1f, y - r * 0.7f, x + r * 0.1f, y + r * 0.3f, pt)
-                    pt.color = (a shl 24) or 0xFFD54F
-                    c.drawRect(x - r * 0.4f, y + r * 0.3f, x + r * 0.4f, y + r * 0.42f, pt)
-                    st.color = (a shl 24) or 0xFFF59D
-                    st.strokeWidth = 2.5f * d
-                    c.drawLine(x - r * 0.6f, y - r * 0.1f, x - r * 0.3f, y - r * 0.4f, st)
-                    c.drawLine(x + r * 0.6f, y - r * 0.1f, x + r * 0.3f, y - r * 0.4f, st)
+                    glow(c, x, y, r * 0.95f, 0xFFC94A, a)
+                    sword(c, x, y, r * 0.95f, -0.8f, 0xE3EAF5, 0xFFD54F, a)
+                    bold(c, x - r * 0.75f, y + r * 0.55f, x - r * 0.4f, y + r * 0.55f, 2.4f * d, 0xFFF59D, a)
+                    bold(c, x - r * 0.8f, y + r * 0.8f, x - r * 0.35f, y + r * 0.8f, 2.4f * d, 0xFFF59D, a)
                 }
-
                 1 -> {
-                    path.reset()
-                    path.moveTo(x - r * 0.5f, y - r * 0.5f)
-                    path.lineTo(x + r * 0.5f, y - r * 0.5f)
-                    path.lineTo(x + r * 0.5f, y + r * 0.1f)
-                    path.lineTo(x, y + r * 0.7f)
-                    path.lineTo(x - r * 0.5f, y + r * 0.1f)
-                    path.close()
-                    pt.color = (a shl 24) or 0x3F6FD0
-                    c.drawPath(path, pt)
-                    st.color = (a shl 24) or 0xFFD54F
-                    st.strokeWidth = 2.5f * d
-                    c.drawPath(path, st)
+                    glow(c, x, y, r * 0.95f, 0x4FA3FF, a)
+                    poly(c, floatArrayOf(x - r * 0.55f, y - r * 0.6f, x + r * 0.55f, y - r * 0.6f, x + r * 0.55f, y + r * 0.1f, x, y + r * 0.8f, x - r * 0.55f, y + r * 0.1f), 0x3F7FD6, a, 0xE3F2FF)
+                    poly(c, floatArrayOf(x - r * 0.3f, y - r * 0.4f, x + r * 0.3f, y - r * 0.4f, x + r * 0.3f, y + r * 0.05f, x, y + r * 0.45f, x - r * 0.3f, y + r * 0.05f), 0x7FB8FF, a, 0xFFFFFF)
                 }
                 2 -> {
-                    st.color = (a shl 24) or 0xE0E6F0
-                    st.strokeWidth = 3.5f * d
-                    c.drawArc(x - r * 0.55f, y - r * 0.55f, x + r * 0.55f, y + r * 0.55f, t * 200f, 250f, false, st)
-                    pt.color = (a shl 24) or 0xFFD54F
-                    c.drawRect(x - r * 0.08f, y - r * 0.08f, x + r * 0.08f, y + r * 0.08f, pt)
+                    glow(c, x, y, r * 0.95f, 0xFFE9A0, a)
+                    for (k in 0..2) {
+                        val an = t * 9f + k * 2.0944f
+                        sword(c, x, y, r * 0.8f, an, 0xDDE6F2, 0xFFD54F, a)
+                    }
+                    boldCircle(c, x, y, r * 0.82f, 1.6f * d, 0xFFFFFF, a / 2)
                 }
                 else -> {
-                    pt.color = (a shl 24) or 0xFFF59D
-                    c.drawRect(x - r * 0.12f, y - r * 0.7f, x + r * 0.12f, y + r * 0.35f, pt)
+                    glow(c, x, y, r * (0.9f + 0.08f * pu), 0xFFE9A0, a)
+                    sword(c, x + r * 0.1f, y + r * 0.1f, r * 1.05f, 2.356f, 0xF2F6FF, 0xFFD54F, a)
+                    boldCircle(c, x, y, r * 0.8f, 2.2f * d, 0xFFE9A0, a)
+                }
+            }
+            1 -> when (i) {
+                0 -> {
+                    glow(c, x, y, r * 0.95f, 0x7FD8FF, a)
+                    bold(c, x - r * 0.7f, y + r * 0.45f, x + r * 0.7f, y - r * 0.45f, 4f * d, 0xE1F5FE, a)
+                    bold(c, x + r * 0.7f, y - r * 0.45f, x + r * 0.35f, y - r * 0.5f, 3.2f * d, 0xE1F5FE, a)
+                    bold(c, x + r * 0.7f, y - r * 0.45f, x + r * 0.55f, y - r * 0.1f, 3.2f * d, 0xE1F5FE, a)
+                }
+                1 -> {
+                    glow(c, x, y, r * 0.95f, 0x7FD8FF, a)
+                    for (k in -1..1) bold(c, x - r * 0.55f, y + k * r * 0.35f, x + r * 0.55f, y + k * r * 0.35f - r * 0.1f, 3.4f * d, 0xB3E5FC, a)
+                    bold(c, x, y - r * 0.65f, x, y + r * 0.65f, 3.4f * d, 0xFFFFFF, a)
+                }
+                2 -> {
+                    glow(c, x, y, r * 0.95f, 0x7FD8FF, a)
+                    bold(c, x - r * 0.7f, y, x + r * 0.5f, y, 4f * d, 0xE1F5FE, a)
+                    bold(c, x + r * 0.5f, y, x + r * 0.2f, y - r * 0.3f, 3.2f * d, 0xE1F5FE, a)
+                    bold(c, x + r * 0.5f, y, x + r * 0.2f, y + r * 0.3f, 3.2f * d, 0xE1F5FE, a)
+                }
+                else -> {
+                    glow(c, x, y, r * 0.95f, 0x4FC3F7, a)
+                    for (k in 0..3) boldCircle(c, x, y - r * 0.5f + k * r * 0.33f, r * (0.2f + 0.14f * k), 2.4f * d, 0xE1F5FE, a)
+                }
+            }
+            else -> when (i) {
+                0 -> {
+                    glow(c, x, y, r * 0.95f, 0xFFD54F, a)
+                    boldCircle(c, x, y, r * 0.45f, 3.4f * d, 0xFFF59D, a)
+                    bold(c, x - r * 0.9f, y, x - r * 0.45f, y, 3.4f * d, 0xFFFFFF, a)
+                    bold(c, x + r * 0.45f, y, x + r * 0.9f, y, 3.4f * d, 0xFFFFFF, a)
                     pt.color = (a shl 24) or 0xFFFFFF
-                    c.drawRect(x - r * 0.05f, y - r * 0.7f, x + r * 0.05f, y + r * 0.35f, pt)
-                    pt.color = (a shl 24) or 0xFFD54F
-                    c.drawRect(x - r * 0.45f, y - r * 0.78f, x + r * 0.45f, y - r * 0.64f, pt)
+                    c.drawCircle(x, y, r * 0.16f, pt)
+                }
+                1 -> {
+                    glow(c, x, y, r * 0.95f, 0x81D4FA, a)
+                    pt.color = (a shl 24) or 0xB3E5FC
+                    c.drawCircle(x, y, r * 0.55f, pt)
+                    boldCircle(c, x, y, r * 0.55f, 2.4f * d, 0xFFFFFF, a)
+                    star(c, x, y, r * 0.32f, r * 0.1f, 4, 0.785f)
+                }
+                2 -> {
+                    glow(c, x, y, r * 0.95f, 0xFFEB3B, a)
+                    pt.color = (a shl 24) or 0xFFF176
+                    c.drawCircle(x, y, r * 0.45f, pt)
                     pt.color = (a shl 24) or 0xFFFFFF
-                    path.reset()
-                    path.moveTo(x - r * 0.12f, y + r * 0.35f)
-                    path.lineTo(x + r * 0.12f, y + r * 0.35f)
-
-                    path.lineTo(x, y + r * 0.75f)
-                    path.close()
-                    c.drawPath(path, pt)
+                    c.drawCircle(x, y, r * 0.22f, pt)
+                    for (k in 0..7) {
+                        val an = k * 0.785f + t * 1.5f
+                        bold(c, x + cos(an) * r * 0.58f, y + sin(an) * r * 0.58f, x + cos(an) * r * 0.82f, y + sin(an) * r * 0.82f, 2.4f * d, 0xFFFFFF, a)
+                    }
+                }
+                else -> {
+                    glow(c, x, y, r * (0.9f + 0.08f * pu), 0xFFE082, a)
+                    bold(c, x - r * 0.9f, y, x + r * 0.9f, y, 7f * d, 0xFFF59D, a)
+                    bold(c, x - r * 0.9f, y, x + r * 0.9f, y, 3f * d, 0xFFFFFF, a)
+                    star(c, x - r * 0.85f, y, r * 0.3f, r * 0.08f, 4, 0f)
                 }
             }
         }
     }
 
     private fun drawGlyph(c: Canvas, i: Int, x: Float, y: Float, r: Float, ready: Boolean) {
-        if (pl.hero >= 2) { drawGlyphNew(c, pl.hero, i, x, y, r, ready); return }
+        drawGlyphNew(c, pl.hero, i, x, y, r, ready); return
         val a = if (ready) 0xFF else 0x77
         pt.style = Paint.Style.FILL
         when (i) {

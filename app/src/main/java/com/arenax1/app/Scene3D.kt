@@ -614,10 +614,10 @@ class Scene(private val g: GameView) {
             if (m.dead || abs(m.x - cx) > 2500f || g.hiddenFor(m, 0)) continue
             place(m)
             fl = m.flash > 0f
-            b.sc(1.2f, 1.2f, 1.2f)
+            b.sc(1.5f, 1.5f, 1.5f)
             minion(m)
             b.pop()
-            shadow(m.x, m.y, 16f)
+            shadow(m.x, m.y, 21f)
             if (m.rootT > 0f) bindFx(m)
         }
         for (c in g.champs) {
@@ -630,7 +630,7 @@ class Scene(private val g: GameView) {
                 champBody(c)
             }
             b.pop()
-            shadow(c.x, c.y, 24f)
+            shadow(c.x, c.y, 32f)
             teamRing(c)
             if (c.rootT > 0f) bindFx(c)
         }
@@ -650,7 +650,7 @@ class Scene(private val g: GameView) {
             b.rotZ(-k * 88f)
             val s = 1f - k * 0.55f
             b.sc(s, s, s)
-            if (u is Champ) champBody(u) else if (u is Minion) { b.sc(1.2f, 1.2f, 1.2f); minion(u) }
+            if (u is Champ) champBody(u) else if (u is Minion) { b.sc(1.5f, 1.5f, 1.5f); minion(u) }
             b.pop()
         }
         for (z in g.zones) zone(z)
@@ -745,8 +745,8 @@ class Scene(private val g: GameView) {
         val col = if (c.team == 0) cc(0xFF4FC3F7) else cc(0xFFFF5252)
         val gy = groundH(c.x, c.y) + 1.1f
         b.mode = 2
-        b.ring(c.x, gy, c.y, 26f, 30f, col, 0.85f, false, 28)
-        if (c.rootT > 0f) b.ring(c.x, gy + 0.2f, c.y, 34f, 38f, cc(0xFFFFF176), 0.95f, false, 28)
+        b.ring(c.x, gy, c.y, 35f, 40f, col, 0.85f, false, 28)
+        if (c.rootT > 0f) b.ring(c.x, gy + 0.2f, c.y, 45f, 50f, cc(0xFFFFF176), 0.95f, false, 28)
         b.mode = 0
     }
 
@@ -792,9 +792,9 @@ class Scene(private val g: GameView) {
     private fun champBody(c: Champ) {
         if (c.sprite) return
         when (c.hero) {
-            2 -> { b.sc(1.35f, 1.35f, 1.35f); zed(c, false, 0) }
-            3 -> { b.sc(1.4f, 1.4f, 1.4f); garen(c) }
-            else -> { b.sc(1.35f, 1.35f, 1.35f); lux(c) }
+            2 -> { b.sc(1.8f, 1.8f, 1.8f); zed(c, false, 0) }
+            3 -> { b.sc(1.9f, 1.9f, 1.9f); garen(c) }
+            else -> { b.sc(1.8f, 1.8f, 1.8f); lux(c) }
         }
     }
 
@@ -1057,7 +1057,7 @@ class Scene(private val g: GameView) {
         b.push()
         b.tr(x, gy, y)
         b.rotY(-Math.toDegrees(fa.toDouble()).toFloat())
-        b.sc(1.35f, 1.35f, 1.35f)
+        b.sc(1.8f, 1.8f, 1.8f)
         zed(c, true, mode)
         b.pop()
         b.mode = 2
@@ -1405,6 +1405,25 @@ class Scene(private val g: GameView) {
         val gy = groundH(f.x, f.y)
         val rr = cc(0xFFFF2A3A)
         val gold = cc(0xFFFFE9A0)
+        run {
+            val big = f.kind != 9
+            val pc = if (f.kind in 6..8) cc(0xFFFFD54F) else cc(0xFFFF2A3A)
+            val ek = smooth(k)
+            b.mode = 2
+            if (big) {
+                if (k < 0.3f) b.sphere(f.x, gy + 40f, f.y, 90f * (1f - k / 0.3f) + 30f, 70f * (1f - k / 0.3f) + 20f, 90f * (1f - k / 0.3f) + 30f, white, 0.45f * (1f - k / 0.3f), false, 10, 7)
+                b.ring(f.x, gy + 3f, f.y, 30f + 210f * ek, 40f + 215f * ek, pc, 0.7f * (1f - k), false, 44)
+                b.ring(f.x, gy + 3.4f, f.y, 14f + 150f * ek, 20f + 152f * ek, white, 0.6f * (1f - k), false, 40)
+                b.cyl(f.x, gy, f.y, 36f * (1f - ek) + 6f, 4f, 320f * (0.4f + 0.6f * (1f - k)), pc, 12, 0.22f * (1f - k), false)
+                for (i in 0 until 12) {
+                    val an = i * 0.5236f + f.ang
+                    val rd = 40f + 190f * ek
+                    val hh = 14f + (60f + (i % 3) * 30f) * ek
+                    b.sphere(f.x + cos(an) * rd, gy + hh, f.y + sin(an) * rd, 4f, 4f * (1f + ek), 4f, if (i % 2 == 0) white else pc, 0.9f * (1f - k), false, 5, 3)
+                }
+            }
+            b.mode = 0
+        }
         when (f.kind) {
             0, 9 -> {
                 b.mode = 0
@@ -2255,7 +2274,7 @@ class Scene(private val g: GameView) {
 
     private fun tower(tw: Tower) {
         b.dq = 0.8f
-        val s = if (tw.nexus) 1.7f else 1f
+        val s = if (tw.nexus) 2.1f else 1.3f
         val team = if (tw.team == 0) cc(0xFF4FC3F7) else cc(0xFFFF5252)
         val teamD = if (tw.team == 0) cc(0xFF2A74A8) else cc(0xFFA83A3A)
         val teamL = if (tw.team == 0) cc(0xFFBDEBFF) else cc(0xFFFFC4BD)

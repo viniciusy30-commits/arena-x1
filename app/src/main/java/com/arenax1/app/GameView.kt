@@ -199,7 +199,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal val COST = floatArrayOf(50f, 60f, 70f, 100f)
     internal val RANGE = floatArrayOf(950f, 0f, 780f, 1700f)
     internal val CH_RANGE = 560f
-    internal val HERO_NAME = arrayOf("Lux", "Yasuo", "Zed", "Garen")
+    internal val HERO_NAME = arrayOf("Lux", "Yasuo", "Yuki", "Garen")
 
     // controles
     internal var joyId = -1
@@ -880,7 +880,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         c.castMax = 0.35f
         c.castT = 0.35f
         c.ghost = max(c.ghost, 0.12f)
-        burst(c.x, c.y, C(0xFFB71C1C), 14)
+        burst(c.x, c.y, C(0xFF7FE8FF), 14)
     }
 
     private fun updShadowMove(c: Champ, dt: Float) {
@@ -1435,14 +1435,14 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         val px = 12f * d
         val py = 10f * d
         blk(c, px, py, px + 44f * d, py + 44f * d, C(0xFF263238))
-        pt.color = when (pl.hero) { 2 -> C(0xFF1B1C26); 3 -> C(0xFF6D4C41); else -> C(0xFFFFD54F) }
+        pt.color = when (pl.hero) { 2 -> C(0xFFDCEBFA); 3 -> C(0xFF6D4C41); else -> C(0xFFFFD54F) }
         c.drawRect(px + 5f * d, py + 4f * d, px + 39f * d, py + 22f * d, pt)
-        pt.color = if (pl.hero == 2) C(0xFF3A3A4D) else C(0xFFFFCCA8)
+        pt.color = if (pl.hero == 2) C(0xFFFFE3D0) else C(0xFFFFCCA8)
         c.drawRect(px + 11f * d, py + 14f * d, px + 33f * d, py + 36f * d, pt)
-        pt.color = if (pl.hero == 2) C(0xFFFF3D3D) else C(0xFF212121)
+        pt.color = if (pl.hero == 2) C(0xFF29C6FF) else C(0xFF212121)
         c.drawRect(px + 15f * d, py + 22f * d, px + 19f * d, py + 26f * d, pt)
         c.drawRect(px + 25f * d, py + 22f * d, px + 29f * d, py + 26f * d, pt)
-        pt.color = when (pl.hero) { 2 -> C(0xFFB71C1C); 3 -> C(0xFF3F7FD6); else -> C(0xFF3F51B5) }
+        pt.color = when (pl.hero) { 2 -> C(0xFF1E88C8); 3 -> C(0xFF3F7FD6); else -> C(0xFF3F51B5) }
         c.drawRect(px + 8f * d, py + 36f * d, px + 36f * d, py + 42f * d, pt)
         val bxx = px + 50f * d
         val bw = 150f * d
@@ -1601,11 +1601,11 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 }
             }
             2 -> {
-                pt.color = C(0x55E53935)
+                pt.color = C(0x5529C6FF)
                 c.drawCircle(cx, cy, r, pt)
-                pt.color = C(0xFF1E1F2C)
+                pt.color = C(0xFF3B5B86)
                 star(c, cx, cy, r * 0.95f, r * 0.26f, 4, t * 1.2f)
-                pt.color = C(0xFFFF3D3D)
+                pt.color = C(0xFF29C6FF)
                 star(c, cx, cy, r * 0.5f, r * 0.14f, 4, t * 1.2f + 0.78f)
                 pt.color = C(0xFFFFFFFF)
                 c.drawCircle(cx, cy, r * 0.1f, pt)
@@ -1640,14 +1640,14 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         val cw = (w - gap * 5f) / 4f
         val top = h * 0.24f
         val btm = h * 0.93f
-        val names = arrayOf("LUX", "YASUO", "ZED", "GAREN")
-        val roles = arrayOf("Maga de luz", "Espadachim (kit de luz)", "Assassino das sombras", "Guerreiro demaciano")
+        val names = arrayOf("LUX", "YASUO", "YUKI", "GAREN")
+        val roles = arrayOf("Maga de luz", "Espadachim (kit de luz)", "Ninja do gelo", "Guerreiro demaciano")
         val kind = arrayOf("À distância", "À distância", "Corpo a corpo", "Corpo a corpo")
-        val accent = intArrayOf(C(0xFFFFD54F), C(0xFF4DB6AC), C(0xFFE53935), C(0xFF4F7FE8))
+        val accent = intArrayOf(C(0xFFFFD54F), C(0xFF4DB6AC), C(0xFF29C6FF), C(0xFF4F7FE8))
         val kit = arrayOf(
             arrayOf("Q Prisão de Luz", "W Barreira", "E Singularidade", "R Centelha Final"),
             arrayOf("Q Prisão de Luz", "W Barreira", "E Singularidade", "R Centelha Final"),
-            arrayOf("Q Shuriken Navalha", "W Sombra Viva (2x)", "E Corte Sombrio", "R Marca da Morte"),
+            arrayOf("Q Estilhaço Gélido", "W Clone de Gelo (2x)", "E Corte Glacial", "R Selo do Inverno"),
             arrayOf("Q Golpe Decisivo", "W Coragem", "E Julgamento", "R Justiça Demaciana")
         )
         for (i in 0..3) {
@@ -1740,40 +1740,40 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         when (hero) {
             2 -> when (i) {
                 0 -> {
-                    glow(c, x, y, r * 0.95f, 0xFF2A3A, a)
+                    glow(c, x, y, r * 0.95f, 0x29C6FF, a)
                     star(c, x, y, r * 0.82f, r * 0.24f, 4, t * 2.2f)
                     pt.color = (a shl 24) or 0x2A2A38
                     c.drawCircle(x, y, r * 0.26f, pt)
-                    pt.color = (a shl 24) or 0xFF4A4A
+                    pt.color = (a shl 24) or 0x4FD6FF
                     c.drawCircle(x, y, r * 0.13f, pt)
                 }
                 1 -> {
-                    glow(c, x, y, r * 0.95f, 0x9B2D8F, a)
-                    pt.color = (a shl 24) or 0x14101E
+                    glow(c, x, y, r * 0.95f, 0x3F6FD6, a)
+                    pt.color = (a shl 24) or 0x0E1A33
                     c.drawCircle(x - r * 0.18f, y + r * 0.1f, r * 0.42f, pt)
-                    boldCircle(c, x - r * 0.18f, y + r * 0.1f, r * 0.42f, 2f * d, 0xC03A9A, a)
-                    pt.color = (a shl 24) or 0xFF3A4A
+                    boldCircle(c, x - r * 0.18f, y + r * 0.1f, r * 0.42f, 2f * d, 0x6AA8FF, a)
+                    pt.color = (a shl 24) or 0x4FD6FF
                     c.drawCircle(x - r * 0.1f, y + r * 0.02f, r * 0.08f, pt)
-                    bold(c, x + r * 0.08f, y - r * 0.12f, x + r * 0.7f, y - r * 0.5f, 3.4f * d, 0xFF6A7A, a)
-                    bold(c, x + r * 0.7f, y - r * 0.5f, x + r * 0.42f, y - r * 0.52f, 3f * d, 0xFF6A7A, a)
-                    bold(c, x + r * 0.7f, y - r * 0.5f, x + r * 0.66f, y - r * 0.22f, 3f * d, 0xFF6A7A, a)
+                    bold(c, x + r * 0.08f, y - r * 0.12f, x + r * 0.7f, y - r * 0.5f, 3.4f * d, 0x9FEFFF, a)
+                    bold(c, x + r * 0.7f, y - r * 0.5f, x + r * 0.42f, y - r * 0.52f, 3f * d, 0x9FEFFF, a)
+                    bold(c, x + r * 0.7f, y - r * 0.5f, x + r * 0.66f, y - r * 0.22f, 3f * d, 0x9FEFFF, a)
                 }
                 2 -> {
-                    glow(c, x, y, r * 0.95f, 0xFF2A3A, a)
+                    glow(c, x, y, r * 0.95f, 0x29C6FF, a)
                     boldCircle(c, x, y, r * 0.62f, 2.4f * d, 0xFFFFFF, a)
-                    bold(c, x - r * 0.55f, y - r * 0.55f, x + r * 0.55f, y + r * 0.55f, 4.2f * d, 0xFF4A5A, a)
-                    bold(c, x + r * 0.55f, y - r * 0.55f, x - r * 0.55f, y + r * 0.55f, 4.2f * d, 0xFF4A5A, a)
+                    bold(c, x - r * 0.55f, y - r * 0.55f, x + r * 0.55f, y + r * 0.55f, 4.2f * d, 0x4FD6FF, a)
+                    bold(c, x + r * 0.55f, y - r * 0.55f, x - r * 0.55f, y + r * 0.55f, 4.2f * d, 0x4FD6FF, a)
                 }
                 else -> {
-                    glow(c, x, y, r * (0.9f + 0.08f * pu), 0xFF1744, a)
-                    boldCircle(c, x, y, r * 0.55f, 3f * d, 0xFF3A4A, a)
+                    glow(c, x, y, r * (0.9f + 0.08f * pu), 0x29C6FF, a)
+                    boldCircle(c, x, y, r * 0.55f, 3f * d, 0x4FD6FF, a)
                     for (k in 0..3) {
                         val an = k * 1.5708f + t
                         bold(c, x + cos(an) * r * 0.62f, y + sin(an) * r * 0.62f, x + cos(an) * r * 0.92f, y + sin(an) * r * 0.92f, 3.4f * d, 0xFFFFFF, a)
                     }
                     pt.color = (a shl 24) or 0xFFFFFF
                     c.drawCircle(x, y, r * 0.16f, pt)
-                    pt.color = (a shl 24) or 0xFF1744
+                    pt.color = (a shl 24) or 0x29C6FF
                     c.drawCircle(x, y, r * 0.09f, pt)
                 }
             }

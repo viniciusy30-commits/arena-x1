@@ -804,12 +804,12 @@ class Scene(private val g: GameView) {
         val ally = c.team == 0
         val dashing = !ghost && c.dashT > 0f
         val ga = if (ghost) 0.5f else if (dashing) 0.35f else 1f
-        val suit = if (ghost) cc(0xFF0B0B12) else if (ally) cc(0xFF1D1E2B) else cc(0xFF241A35)
-        val suitL = if (ghost) cc(0xFF15151E) else if (ally) cc(0xFF34364A) else cc(0xFF3A2C52)
-        val steel = if (ghost) cc(0xFF20202B) else cc(0xFF8E93A8)
-        val red = if (ghost) cc(0xFF8A1620) else if (ally) cc(0xFFFF3D3D) else cc(0xFFC05CFF)
-        val redD = if (ghost) cc(0xFF4A0A10) else if (ally) cc(0xFFB71C1C) else cc(0xFF7B2BB8)
-        val face = if (ghost) cc(0xFF0E0E16) else cc(0xFF2A2A3A)
+        val suit = if (ghost) cc(0xFF7FB6E8) else if (ally) cc(0xFFE8F2FC) else cc(0xFFEDE4F7)
+        val suitL = if (ghost) cc(0xFF9FCBF2) else if (ally) cc(0xFFFFFFFF) else cc(0xFFFFFFFF)
+        val steel = if (ghost) cc(0xFFB8DCF5) else cc(0xFF3B5B86)
+        val red = if (ghost) cc(0xFF4FC3F7) else if (ally) cc(0xFF29C6FF) else cc(0xFFB58CFF)
+        val redD = if (ghost) cc(0xFF2A7FB0) else if (ally) cc(0xFF1E88C8) else cc(0xFF7B52C9)
+        val face = if (ghost) cc(0xFFBFE0F8) else cc(0xFFFFE3D0)
         val amp = when (mode) { 0 -> (c.mv / 0.1f).coerceIn(0f, 1f); 1 -> 0f; else -> 1f }
         val ph = if (mode == 2) t * 16f else c.walk * 1.1f
         val sw = sin(ph) * amp
@@ -953,36 +953,57 @@ class Scene(private val g: GameView) {
         b.cyl(0f, 40.2f, 0f, 5.6f, 4.2f, 3.4f, suit, 12, ga)
         b.cyl(0f, 40.8f, 0f, 5.8f, 5.8f, 0.9f, red, 12, ga)
         for (s in intArrayOf(-1, 1)) {
-            b.sphere(0f, 40.6f, s * 9.0f, 4.4f, 3.4f, 4.4f, steel, ga, true, 10, 6)
-            b.sphere(0f, 42.6f, s * 9.0f, 3.2f, 1.2f, 3.4f, redD, ga, true, 8, 4)
+            b.sphere(0f, 40.4f, s * 9.0f, 4.2f, 3.2f, 4.2f, suitL, ga, true, 10, 6)
+            for (j in 0..2) {
+                b.push()
+                b.tr(0f, 42f, s * (8.4f + j * 1.4f))
+                b.rotX(s * (20f + j * 16f))
+                b.rotZ(-6f + j * 4f)
+                b.cyl(0f, 0f, 0f, 1.7f - j * 0.3f, 0f, 9f - j * 1.6f, red, 5, 0.9f * ga)
+                b.pop()
+            }
         }
-        // shurikens nas costas
+        // duas lâminas curvas cruzadas nas costas e cachecol longo
         for (s in intArrayOf(-1, 1)) {
             b.push()
-            b.tr(-7.6f, 36f + s * 2.5f, s * 2.8f)
-            b.rotZ(90f)
-            shuriken(if (s > 0) 8f else 9.5f, t * 40f * s, suitL, red, ga)
+            b.tr(-7.8f, 33f, 0f)
+            b.rotX(s * 14f)
+            b.rotZ(s * 32f)
+            b.box(0f, 0f, 0f, 1.0f, 26f, 1.6f, steel, ga, true)
+            b.box(0f, 11f, 0f, 1.2f, 2.4f, 3.4f, redD, ga, true)
             b.pop()
         }
+        b.push()
+        b.tr(-1f, 41f, 0f)
+        for (s in intArrayOf(-1, 1)) {
+            b.push()
+            b.tr(-3.5f, 0f, s * 2.4f)
+            b.rotZ(-100f + amp * 14f + dk * 40f)
+            zstrand(11, 2.3f, 0.6f, 5.6f, suitL, red, 8f + amp * 4f, -3f, ga)
+            b.pop()
+        }
+        b.pop()
         // cabeça
         b.push()
         b.tr(0.8f, 47.5f, 0f)
         b.rotZ(lean * 0.5f)
         b.sphere(0f, 0f, 0f, 5.4f, 6.0f, 5.2f, face, ga, true, 12, 8)
-        b.sphere(2.6f, -0.6f, 0f, 3.2f, 4.6f, 4.8f, steel, ga, true, 10, 6)
-        b.sphere(-1.2f, 2.0f, 0f, 5.0f, 4.6f, 5.0f, suit, ga, true, 10, 6)
+        b.sphere(-1.2f, 1.6f, 0f, 6.0f, 6.0f, 5.9f, suit, ga, true, 12, 8)
+        b.sphere(2.6f, -2.2f, 0f, 3.4f, 3.0f, 5.0f, suitL, ga, true, 10, 6)
+        b.box(4.9f, 3.2f, 0f, 1.0f, 1.8f, 10.4f, redD, ga, true)
         b.mode = 2
         for (s in intArrayOf(-1, 1)) {
-            b.box(5.6f, 1.0f, s * 2.2f, 1.4f, 1.0f, 2.8f, red, 0.95f * ga, false)
-            b.sphere(5.8f, 1.0f, s * 2.2f, 2.4f, 1.8f, 3.2f, red, 0.25f * ga, false, 6, 4)
+            b.box(5.6f, 0.6f, s * 2.2f, 1.4f, 1.1f, 2.6f, red, 0.95f * ga, false)
+            b.sphere(5.8f, 0.6f, s * 2.2f, 2.4f, 1.8f, 3.2f, red, 0.28f * ga, false, 6, 4)
         }
         b.mode = 0
-        b.push()
-        b.tr(-4f, 2.6f, 0f)
-
-        b.rotZ(-(112f - amp * 22f))
-        zstrand(7, 2.3f, 0.7f, 5.4f, suit, red, 5f, -4f, ga)
-        b.pop()
+        for (j in 0..2) {
+            b.push()
+            b.tr(0.5f, 5.6f, (j - 1) * 2.4f)
+            b.rotZ(-8f)
+            b.cyl(0f, 0f, 0f, 1.5f, 0f, 6.5f - abs(j - 1) * 1.6f, red, 5, 0.9f * ga)
+            b.pop()
+        }
         b.pop()
         // braços com lâminas
         for (s in intArrayOf(-1, 1)) {
@@ -1000,9 +1021,13 @@ class Scene(private val g: GameView) {
             zl(8.5f, 2.4f, 2.0f, suitL, ga)
             b.cyl(0f, -8.6f, 0f, 2.7f, 2.4f, 4.4f, steel, 10, ga)
             b.sphere(0f, -9.8f, 0f, 2.3f, 2.3f, 2.3f, suit, ga, true, 8, 5)
-            b.sphere(0f, -19.5f, 0f, 0.9f, 9.2f, 0.4f, steel, ga, true, 6, 5)
+            b.sphere(0f, -9.2f, 0f, 1.5f, 1.2f, 3.4f, redD, ga, true, 6, 4)
+            for (j in 0 until 6) {
+                val cv = j * j * 0.9f
+                b.sphere(cv * 0.16f, -12.5f - j * 3.4f, 0f, 1.1f, 2.4f, 0.5f, if (j > 3) white else suitL, ga, true, 5, 3)
+            }
             b.mode = 2
-            b.sphere(0f, -19.5f, 0f, 1.5f, 9.8f, 0.8f, red, 0.35f * ga, false, 6, 5)
+            for (j in 0 until 6) b.sphere(j * j * 0.145f, -12.5f - j * 3.4f, 0f, 1.9f, 3.0f, 0.9f, red, 0.34f * ga, false, 5, 3)
             b.mode = 0
             if (s > 0 && cs == 0 && cp < 0.36f) {
                 b.push()
@@ -1047,7 +1072,7 @@ class Scene(private val g: GameView) {
             b.mode = 2
 
             val k = (c.rsT / 4.5f).coerceIn(0f, 1f)
-            b.ring(c.rsX, gy, c.rsY, 44f * k + 6f, 44f * k + 9f, cc(0xFFFF1744), 0.8f, false, 28)
+            b.ring(c.rsX, gy, c.rsY, 44f * k + 6f, 44f * k + 9f, cc(0xFF7FE8FF), 0.8f, false, 28)
             b.mode = 0
         }
     }
@@ -1061,14 +1086,14 @@ class Scene(private val g: GameView) {
         zed(c, true, mode)
         b.pop()
         b.mode = 2
-        b.ring(x, gy + 1.4f, y, 30f, 34f, cc(0xFFFF2A3A), 0.35f + 0.25f * sin(t * 6f), false, 24)
+        b.ring(x, gy + 1.4f, y, 30f, 34f, cc(0xFF4FD6FF), 0.35f + 0.25f * sin(t * 6f), false, 24)
         b.mode = 0
     }
 
     private fun deathMark(u: U) {
         val gy = groundH(u.x, u.y) + 118f
         val k = (u.deathT / 3f).coerceIn(0f, 1f)
-        val rr = cc(0xFFFF1744)
+        val rr = cc(0xFF7FE8FF)
         b.mode = 2
         b.push()
         b.tr(u.x, gy, u.y)
@@ -1403,11 +1428,11 @@ class Scene(private val g: GameView) {
     private fun fx(f: Fx) {
         val k = (f.age / f.max).coerceIn(0f, 1f)
         val gy = groundH(f.x, f.y)
-        val rr = cc(0xFFFF2A3A)
+        val rr = cc(0xFF4FD6FF)
         val gold = cc(0xFFFFE9A0)
         run {
             val big = f.kind != 9
-            val pc = if (f.kind in 6..8) cc(0xFFFFD54F) else cc(0xFFFF2A3A)
+            val pc = if (f.kind in 6..8) cc(0xFFFFD54F) else cc(0xFF4FD6FF)
             val ek = smooth(k)
             b.mode = 2
             if (big) {
@@ -1465,7 +1490,7 @@ class Scene(private val g: GameView) {
             }
             3 -> {
                 val e = 1f - (1f - k) * (1f - k)
-                val red = cc(0xFFFF1744)
+                val red = cc(0xFF7FE8FF)
                 b.mode = 2
                 for (i in 0 until 3) {
                     val kk = ((k * 1.4f) - i * 0.18f).coerceIn(0f, 1f)
@@ -1606,8 +1631,8 @@ class Scene(private val g: GameView) {
     }
 
     private fun aimNew(pl: Champ) {
-        val fill = if (pl.hero == 2) cc(0xFFFF4D4D) else cc(0xFFFFD54F)
-        val edge = if (pl.hero == 2) cc(0xFFB71C1C) else cc(0xFFC97A00)
+        val fill = if (pl.hero == 2) cc(0xFF4FD6FF) else cc(0xFFFFD54F)
+        val edge = if (pl.hero == 2) cc(0xFF1E88C8) else cc(0xFFC97A00)
         val tip = cc(0xFFFFF0E0)
         for (i in 0..3) {
             if (g.bId[i] == -1 || !g.bDrag[i]) continue

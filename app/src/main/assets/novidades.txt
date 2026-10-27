@@ -1,5 +1,135 @@
-#id 2026-10-26-g
-#titulo Yasuo andando (teste de sprites)
-- Seu campeão agora aparece como o sprite do Yasuo, com 8 direções
-- Animação de caminhada quando você anda e pose parada quando para
-- O bot continua sendo a Lux
+#id 2026-10-27-c
+#titulo Script mais paciente com anexos
+- O Script espera o chat novo carregar de verdade antes de anexar
+- Confere cada anexo na caixa (e se terminou de subir) e só então escreve e envia a tarefa
+- Sem tempo máximo: segue no instante em que tudo está pronto; se um anexo demorar, ele tenta de novo sozinho
+- Fecha sozinho avisos que atrapalham: novidades/atualização do app e janelas do Claude (menos o aviso de limite, que o app precisa ler)
+- Se o limite aparecer enquanto prepara o envio, ele troca de conta em vez de ficar esperando
+- Vale também ao continuar em outra conta
+
+#id 2026-10-27-b
+#titulo Uso estimado para contas free
+- Contas free não têm barra de uso: o app agora estima o % de cada conta pelo que acontece nos chats
+- A estimativa aprende sozinha: cada vez que o Claude avisa que o limite acabou, o app calibra a capacidade da conta
+- Aparece com ~ na etiqueta da aba e em Uso das contas; contas com barra real continuam mostrando o valor exato
+- Toque no card da conta em Uso das contas para corrigir ("Está em 50%"), zerar ou esquecer a estimativa
+
+#id 2026-10-27-a
+#titulo Script de tarefas automático
+- Menu → Script de tarefas: monte a lista do que quer fazer e toque em Play
+- O app manda uma tarefa por vez no Claude, espera terminar e baixa cada ZIP sozinho
+- Se o limite acabar, ele leva tudo para outra conta e continua, mesmo com o app minimizado
+- Só para quando termina a lista; aí mostra todos os ZIPs com botão para enviar ao GitHub (juntos ou um por um)
+- Separe várias tarefas de uma vez com uma linha contendo só ---
+- Prompts grandes (mais de 8 mil caracteres) vão como arquivo .txt anexado, sem travar o chat
+- Uso das contas: cada aba com barra de 0 a 100% (sessão de 5 h e semana), lida da página de uso do Claude e atualizada sozinha; o % também aparece na etiqueta da aba
+- Relatório ao vivo: acompanhe cada tarefa, os arquivos de cada ZIP e a linha do tempo, atualizando sozinho
+
+#id 2026-10-26-a
+#titulo Foto da conta, abas separadas e limite corrigido
+- Foto da conta: segure a aba → Foto da conta e escolha uma imagem da galeria no lugar da letra
+- Abas separadas em Liberadas e Em recarga (as em recarga ficam em ordem de quem volta primeiro)
+- Corrigido: o limite não vai mais para o dia seguinte quando o horário do aviso já passou
+- Quando a recarga termina, o app avisa e recarrega a aba para sumir o aviso antigo
+- O horário de volta agora entende 17:00, 5pm, 17h30, "em 2 horas" e dia da semana
+
+#id 2026-10-25-e
+#titulo Colar texto grande
+- Menu → Colar texto grande: cole qualquer texto, o app vira um arquivo .txt e anexa no chat da aba
+- Dá para usar o texto direto da área de transferência, sem colar na caixa
+
+#id 2026-10-25-d
+#titulo Atualização automática do jogo
+- Quando o build termina, o app já baixa o APK e abre a instalação sozinho
+- No Android 12 ou mais novo, pode atualizar o jogo sem nenhum toque
+- Ajustes: interruptor "Instalar o jogo sozinho"
+- O app procura atualização dele mesmo a cada 20 minutos
+
+#id 2026-10-25-c
+#titulo Continuar em outra conta
+- O app guarda a conversa do Claude em tempo real (a cada ~15s), uma por aba
+- Quando aparecer o aviso de limite, ele oferece continuar em outra conta
+- Menu → Continuar em outra conta (ou segure a aba): monta um ZIP com a conversa, o log de entregas e o código atual do projeto
+- Abre um chat novo na outra conta, já com a mensagem pronta e o ZIP anexado
+- Salva o chat completo: blocos abertos, imagens, links e uma cópia em HTML (tudo no botão Continuar em outra conta)
+- Anexa o ZIP direto na página da outra conta
+- Ajustes: interruptor "Salvar andamento do Claude"
+
+#id 2026-10-25-b
+#titulo Visual novo + tudo mais fácil
+- Interface redesenhada: abas com avatar colorido, endereço em pílula e dock de favoritos
+- Menu virou painel com atalhos grandes: enviar main, baixar APK, abrir jogo, projetos e ajustes
+- Projetos e ajustes em painéis com ícones; segundo plano agora é um interruptor
+- Novo: Baixar APK mais recente do projeto, com barra de progresso e botão de instalar
+- Popup do build com passos coloridos (✓ ✗ ⏳) e progresso do download
+- Avisos rápidos no rodapé em vez de balões
+
+#id 2026-10-25-a
+#titulo Build ao vivo + anexar melhorado
+- Ao baixar um ZIP do Claude, abre um popup mostrando o envio e os passos do build em tempo real
+- ZIPs baixados por link normal (não só blob) agora também vão pra _incoming/
+- Anexar: escolha entre Foto/vídeo (galeria) ou Arquivo (gerenciador, já na pasta Downloads)
+
+#id 2026-10-24-e
+#titulo Main do repo pro Claude
+- Menu: Enviar main pro Claude — baixa o ZIP do branch do projeto e anexa no chat aberto
+- Galeria do sistema para fotos/vídeos (não o gerenciador de arquivos)
+
+#id 2026-10-24-d
+#titulo Galeria e APK do projeto
+- Anexar foto/vídeo no Claude abre a galeria do sistema (não o gerenciador de arquivos)
+- Menu: Baixar APK mais recente do projeto atual
+
+#id 2026-10-24-c
+#titulo Projetos pelo GitHub
+- Ao adicionar projeto, escolhe o repositório na lista da sua conta
+- Branch, package e pasta _incoming são preenchidos sozinhos
+
+#id 2026-10-24-b
+#titulo Atualizar e abrir o jogo
+- Depois do build OK, o app baixa o APK da release e avisa para instalar
+- Atalho no menu: Abrir jogo (usa o package cadastrado no projeto)
+- No projeto você informa o package (applicationId) do jogo
+
+#id 2026-10-24-a
+#titulo Claude em segundo plano + entrega automática
+- Ao minimizar, o Claude continua rodando (notificação "Multi Abas ativo")
+- Projeto atual global: escolha o repositório de destino no menu
+- Ao baixar um ZIP do Claude, o app sobe sozinho em _incoming/ do projeto
+- Acompanha o Actions e avisa se o build deu certo ou falhou
+- Token do GitHub em Configurações (uma vez só)
+
+#id 2026-10-12-f
+#titulo Links do GitHub pelo Chrome
+- Tocar num link do GitHub dentro do Claude abre pelo Chrome, com o seu login
+
+#id 2026-10-12-e
+#titulo Nome do arquivo nos downloads
+- Arquivos baixados agora mantêm o nome original
+
+#id 2026-10-12-d
+#titulo Downloads corrigidos
+- Arquivos gerados pelo Claude (como ZIP) agora são salvos em Downloads
+
+#id 2026-10-12-c
+#titulo GitHub com o login certo
+- Cada favorito escolhe como abrir: conta da aba, sessão compartilhada ou Chrome
+- Pelo Chrome usa o mesmo login do seu Chrome (marcado com ↗)
+
+#id 2026-10-12-b
+#titulo Limite das contas
+- Segure uma aba e escolha "Definir volta do limite"
+- Um cronômetro mostra quanto falta, embaixo do nome da aba
+- Quando passar da hora aparece "Liberado" em verde
+
+#id 2026-10-12-a
+#titulo Barra de favoritos
+- Barra embaixo com links favoritos que você nomeia
+- Tocar abre o link por cima, na conta da aba atual, e fecha ao sair
+- Segure um favorito para editar ou remover
+
+#id 2026-10-11-a
+#titulo Primeira versão
+- Várias abas, cada uma com login e cookies separados
+- Escolha de arquivos do celular dentro dos sites
+- Atualização pelo próprio app

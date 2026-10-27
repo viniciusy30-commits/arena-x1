@@ -627,8 +627,7 @@ class Scene(private val g: GameView) {
             if (c.sprite) {
                 addSprite(c)
             } else {
-                b.sc(1.35f, 1.35f, 1.35f)
-                lux(c)
+                champBody(c)
             }
             b.pop()
             shadow(c.x, c.y, 24f)
@@ -636,6 +635,13 @@ class Scene(private val g: GameView) {
             if (c.rootT > 0f) bindFx(c)
         }
         fl = false
+        for (c in g.champs) {
+            if (c.dead || abs(c.x - cx) > 2600f) continue
+            if (c.hero == 2) zedShadows(c)
+            if (c.spinT > 0f) spinFx(c)
+        }
+        for (c in g.champs) if (!c.dead && c.deathT > 0f && abs(c.x - cx) < 2600f && !g.hiddenFor(c, 0)) deathMark(c)
+        for (m in g.minions) if (!m.dead && m.deathT > 0f && abs(m.x - cx) < 2600f) deathMark(m)
         for (f in g.deadFx) {
             val u = f.u
             val k = (f.t / 0.8f).coerceIn(0f, 1f)
@@ -644,11 +650,13 @@ class Scene(private val g: GameView) {
             b.rotZ(-k * 88f)
             val s = 1f - k * 0.55f
             b.sc(s, s, s)
-            if (u is Champ) { if (!u.sprite) { b.sc(1.35f, 1.35f, 1.35f); lux(u) } } else if (u is Minion) { b.sc(1.2f, 1.2f, 1.2f); minion(u) }
+            if (u is Champ) champBody(u) else if (u is Minion) { b.sc(1.2f, 1.2f, 1.2f); minion(u) }
             b.pop()
         }
         for (z in g.zones) zone(z)
         for (bm in g.beams) beam(bm)
+        for (f in g.fxs) fx(f)
+        midSeal()
         for (q in g.projs) proj(q)
         b.mode = 2
         for (p in g.parts) {
@@ -656,7 +664,7 @@ class Scene(private val g: GameView) {
             b.box(p.x, groundH(p.x, p.y) + p.z, p.y, p.sz, p.sz, p.sz, p.col, a, false)
         }
         b.mode = 0
-        aim()
+        if (g.pl.hero >= 2) aimNew(g.pl) else aim()
         return b
     }
 
@@ -741,6 +749,944 @@ class Scene(private val g: GameView) {
         if (c.rootT > 0f) b.ring(c.x, gy + 0.2f, c.y, 34f, 38f, cc(0xFFFFF176), 0.95f, false, 28)
         b.mode = 0
     }
+
+    // ================================================== ZED E GAREN (MODELOS)
+
+    private fun smooth(x: Float): Float {
+        val q = x.coerceIn(0f, 1f)
+        return q * q * (3f - 2f * q)
+    }
+
+    private fun zl(len: Float, r0: Float, r1: Float, col: Int, a: Float) {
+        b.cyl(0f, -len, 0f, r1, r0, len, col, 10, a)
+    }
+
+    private fun zstrand(n: Int, r0: Float, r1: Float, step: Float, c1: Int, c2: Int, sway: Float, curl: Float, a: Float) {
+        b.push()
+        for (i in 0 until n) {
+            val k = i / (n - 1f)
+            val r = r0 + (r1 - r0) * k
+            b.rotZ(curl + sway * sin(t * 2.6f + i * 0.8f))
+            b.sphere(0f, -step * 0.5f, 0f, r, step * 0.78f, r, if (i % 2 == 0) c1 else c2, a, true, 8, 5)
+            b.tr(0f, -step, 0f)
+        }
+        b.pop()
+    }
+
+    /** Shuriken de quatro lâminas deitado (plano XZ), girando em Y. */
+    private fun shuriken(r: Float, spin: Float, col: Int, edge: Int, a: Float) {
+        b.push()
+        b.rotY(spin)
+        for (i in 0 until 4) {
+            b.push()
+            b.rotY(i * 90f)
+            b.sphere(r * 0.5f, 0f, 0f, r * 0.55f, r * 0.07f, r * 0.2f, col, a, true, 6, 4)
+
+            b.sphere(r * 0.8f, 0f, r * 0.13f, r * 0.2f, r * 0.05f, r * 0.12f, edge, a, true, 5, 3)
+            b.pop()
+        }
+        b.sphere(0f, 0f, 0f, r * 0.24f, r * 0.12f, r * 0.24f, edge, a, true, 8, 4)
+        b.pop()
+    }
+
+    private fun champBody(c: Champ) {
+        if (c.sprite) return
+        when (c.hero) {
+            2 -> { b.sc(1.35f, 1.35f, 1.35f); zed(c, false, 0) }
+            3 -> { b.sc(1.4f, 1.4f, 1.4f); garen(c) }
+            else -> { b.sc(1.35f, 1.35f, 1.35f); lux(c) }
+        }
+    }
+
+    /** Zed. mode: 0 = normal, 1 = sombra parada, 2 = sombra correndo. */
+    private fun zed(c: Champ, ghost: Boolean, mode: Int) {
+        b.dq = 0.8f
+        val ally = c.team == 0
+        val dashing = !ghost && c.dashT > 0f
+        val ga = if (ghost) 0.5f else if (dashing) 0.35f else 1f
+        val suit = if (ghost) cc(0xFF0B0B12) else if (ally) cc(0xFF1D1E2B) else cc(0xFF241A35)
+        val suitL = if (ghost) cc(0xFF15151E) else if (ally) cc(0xFF34364A) else cc(0xFF3A2C52)
+        val steel = if (ghost) cc(0xFF20202B) else cc(0xFF8E93A8)
+        val red = if (ghost) cc(0xFF8A1620) else if (ally) cc(0xFFFF3D3D) else cc(0xFFC05CFF)
+        val redD = if (ghost) cc(0xFF4A0A10) else if (ally) cc(0xFFB71C1C) else cc(0xFF7B2BB8)
+        val face = if (ghost) cc(0xFF0E0E16) else cc(0xFF2A2A3A)
+        val amp = when (mode) { 0 -> (c.mv / 0.1f).coerceIn(0f, 1f); 1 -> 0f; else -> 1f }
+        val ph = if (mode == 2) t * 16f else c.walk * 1.1f
+        val sw = sin(ph) * amp
+        val bob = abs(sin(ph)) * 2.2f * amp + sin(t * 2f) * 0.6f
+
+        val casting = c.castT > 0f
+        val cp = if (casting) (1f - c.castT / c.castMax).coerceIn(0f, 1f) else 1f
+        val cs = if (casting) c.castS else -1
+        val sp = if (!ghost && c.swing > 0f && !casting) (1f - c.swing / c.swingMax).coerceIn(0f, 1f) else -1f
+        val pi = Math.PI.toFloat()
+        var armR = -sw * 30f
+        var armL = sw * 30f
+        var elbR = 12f
+        var elbL = 12f
+        var spR = 6f
+        var spL = 6f
+        var lean = amp * 6f
+        var twist = 0f
+        var crouch = 0f
+        var spin = 0f
+        val dk = if (dashing) 1f else 0f
+        if (dashing) {
+            armR = -70f; armL = -70f; elbR = 20f; elbL = 20f; lean = 56f; crouch = 3f; spR = 10f; spL = 10f
+        } else if (cs >= 0) {
+            when (cs) {
+                0 -> {
+                    val wnd = smooth(cp / 0.3f)
+                    val rel = smooth((cp - 0.3f) / 0.18f)
+                    val set = smooth((cp - 0.55f) / 0.45f)
+                    val rest = 1f - set
+                    twist = (-34f * wnd * (1f - rel) + 24f * rel) * rest
+                    armR = (-80f * wnd + 190f * rel) * rest
+                    armL = (-50f * wnd + 120f * rel) * rest
+                    elbR = 20f * (1f - rel) + 8f * rel
+                    lean = 6f + 14f * rel * rest
+                    crouch = 4f * wnd * (1f - rel)
+                }
+
+                1 -> {
+                    val th = smooth(cp / 0.3f) * (1f - smooth((cp - 0.6f) / 0.4f))
+                    armR = 125f * th
+                    armL = -40f * th
+                    twist = 18f * th
+                    lean = amp * 6f + 12f * th
+                    crouch = 3f * th
+                }
+                2 -> {
+                    val a = smooth(cp / 0.85f)
+                    val op = sin(pi * cp.coerceIn(0f, 1f))
+                    spin = a * 720f
+                    crouch = 8f * op
+                    armR = 0f; armL = 0f; elbR = 0f; elbL = 0f
+                    spR = 85f * op; spL = 85f * op
+                    lean = 8f * op
+                }
+                3 -> {
+                    val a1 = smooth(cp / 0.3f)
+                    val a2 = smooth((cp - 0.22f) / 0.3f)
+                    val rl = 1f - smooth((cp - 0.75f) / 0.25f)
+                    armR = 150f * a1 * rl
+                    armL = 150f * a2 * rl
+                    elbR = 6f; elbL = 6f
+                    twist = (22f * a1 - 44f * a2) * rl
+                    lean = 10f + 12f * rl
+                    crouch = 5f * rl
+                }
+                else -> {
+                    val op = sin(pi * cp.coerceIn(0f, 1f))
+                    spin = smooth(cp / 0.7f) * 360f
+                    crouch = 5f * op
+
+                    armR = 40f * op; armL = 40f * op; spR = 60f * op; spL = 60f * op
+                }
+            }
+        } else if (sp >= 0f) {
+            val fwd = smooth(sp / 0.5f)
+            val back = smooth((sp - 0.65f) / 0.35f)
+            val a = (-70f + 190f * fwd) * (1f - back)
+            val tw = (-18f + 38f * fwd) * (1f - back)
+            if (c.swingN % 2 == 0) { armR = a; elbR = 10f; twist = tw; armL = 20f }
+            else { armL = a; elbL = 10f; twist = -tw; armR = 20f }
+            lean = 4f + 10f * fwd * (1f - back)
+        }
+
+        b.push()
+        if (spin != 0f) b.rotY(spin)
+        b.mode = 2
+        b.disc(0f, 0.9f, 0f, 26f, red, 0.10f * ga, false, 20)
+        if (dashing) {
+            for (i in 0 until 7) {
+                b.sphere(-14f - i * 17f, 30f + sin(t * 30f + i) * 4f, 0f, 16f - i * 1.6f, 7f, 9f, red, 0.35f * (1f - i / 7f), false, 6, 4)
+            }
+        }
+        b.mode = 0
+
+        // pernas
+        for (s in intArrayOf(-1, 1)) {
+            val swing = s * sw
+            val back = max(0f, -swing)
+            b.push()
+            b.tr(0f, 27.5f - crouch, s * 4.4f)
+            b.rotZ(swing * 32f - dk * (30f + s * 14f) + crouch * 2.5f)
+            zl(11f, 3.6f, 3.0f, suit, ga)
+
+            b.sphere(0f, -11f, 0f, 3.1f, 3.1f, 3.1f, suitL, ga, true, 8, 5)
+            b.tr(0f, -11f, 0f)
+            b.rotZ(-back * 40f - 3f - crouch * 4f - dk * 20f)
+            zl(10f, 3.0f, 2.5f, suitL, ga)
+            b.cyl(0f, -9.6f, 0f, 2.9f, 3.2f, 5.2f, steel, 10, ga)
+            b.cyl(0f, -9.2f, 0f, 3.1f, 3.1f, 1.2f, red, 10, ga)
+            b.sphere(2.6f, -10.2f, 0f, 5.4f, 2.4f, 3.2f, suit, ga, true, 8, 5)
+            b.sphere(6.6f, -10.5f, 0f, 2.4f, 1.8f, 2.4f, suitL, ga, true, 6, 4)
+            b.pop()
+        }
+
+        // corpo
+        b.push()
+        b.tr(0f, 27f + bob - crouch * 0.6f, 0f)
+        b.rotZ(-lean)
+        b.rotY(twist)
+        b.tr(0f, -27f, 0f)
+        b.cyl(0f, 23f, 0f, 7.4f, 6.6f, 5.4f, suit, 12, ga)
+        b.cyl(0f, 27.4f, 0f, 7.0f, 7.0f, 2.0f, red, 12, ga)
+        b.sphere(6.9f, 28.4f, 0f, 1.8f, 1.8f, 1.8f, steel, ga, true, 6, 4)
+        for (sd in intArrayOf(-1, 1)) {
+            b.push()
+            b.tr(-6.2f, 27f, sd * 2.6f)
+            b.rotZ(-(18f + amp * 30f) + sin(t * 3f + sd) * 5f)
+            b.box(0f, -8f, 0f, 1.4f, 16f, 4.2f, red, ga, true)
+            b.pop()
+        }
+        b.push()
+        b.tr(6.4f, 27f, 0f)
+        b.rotZ(-(amp * 14f) - 4f + sin(t * 3f) * 3f)
+        b.box(0f, -6.5f, 0f, 1.4f, 13f, 6f, suitL, ga, true)
+        b.pop()
+
+        b.cyl(0f, 29f, 0f, 7.0f, 7.8f, 12f, suit, 14, ga)
+        b.sphere(3.8f, 37.5f, 0f, 4.3f, 5.4f, 7.2f, suitL, ga, true, 10, 6)
+        b.box(7.4f, 35f, 0f, 0.9f, 10f, 1.6f, red, ga, false)
+        b.cyl(0f, 40.2f, 0f, 5.6f, 4.2f, 3.4f, suit, 12, ga)
+        b.cyl(0f, 40.8f, 0f, 5.8f, 5.8f, 0.9f, red, 12, ga)
+        for (s in intArrayOf(-1, 1)) {
+            b.sphere(0f, 40.6f, s * 9.0f, 4.4f, 3.4f, 4.4f, steel, ga, true, 10, 6)
+            b.sphere(0f, 42.6f, s * 9.0f, 3.2f, 1.2f, 3.4f, redD, ga, true, 8, 4)
+        }
+        // shurikens nas costas
+        for (s in intArrayOf(-1, 1)) {
+            b.push()
+            b.tr(-7.6f, 36f + s * 2.5f, s * 2.8f)
+            b.rotZ(90f)
+            shuriken(if (s > 0) 8f else 9.5f, t * 40f * s, suitL, red, ga)
+            b.pop()
+        }
+        // cabeça
+        b.push()
+        b.tr(0.8f, 47.5f, 0f)
+        b.rotZ(lean * 0.5f)
+        b.sphere(0f, 0f, 0f, 5.4f, 6.0f, 5.2f, face, ga, true, 12, 8)
+        b.sphere(2.6f, -0.6f, 0f, 3.2f, 4.6f, 4.8f, steel, ga, true, 10, 6)
+        b.sphere(-1.2f, 2.0f, 0f, 5.0f, 4.6f, 5.0f, suit, ga, true, 10, 6)
+        b.mode = 2
+        for (s in intArrayOf(-1, 1)) {
+            b.box(5.6f, 1.0f, s * 2.2f, 1.4f, 1.0f, 2.8f, red, 0.95f * ga, false)
+            b.sphere(5.8f, 1.0f, s * 2.2f, 2.4f, 1.8f, 3.2f, red, 0.25f * ga, false, 6, 4)
+        }
+        b.mode = 0
+        b.push()
+        b.tr(-4f, 2.6f, 0f)
+
+        b.rotZ(-(112f - amp * 22f))
+        zstrand(7, 2.3f, 0.7f, 5.4f, suit, red, 5f, -4f, ga)
+        b.pop()
+        b.pop()
+        // braços com lâminas
+        for (s in intArrayOf(-1, 1)) {
+            val aA = if (s > 0) armR else armL
+            val eA = if (s > 0) elbR else elbL
+            val spr = if (s > 0) spR else spL
+            b.push()
+            b.tr(0f, 40f, s * 8.8f)
+            b.rotX(-s * spr)
+            b.rotZ(aA)
+            zl(10f, 2.9f, 2.4f, suit, ga)
+            b.sphere(0f, -10f, 0f, 2.6f, 2.6f, 2.6f, suitL, ga, true, 8, 5)
+            b.tr(0f, -10f, 0f)
+            b.rotZ(eA)
+            zl(8.5f, 2.4f, 2.0f, suitL, ga)
+            b.cyl(0f, -8.6f, 0f, 2.7f, 2.4f, 4.4f, steel, 10, ga)
+            b.sphere(0f, -9.8f, 0f, 2.3f, 2.3f, 2.3f, suit, ga, true, 8, 5)
+            b.sphere(0f, -19.5f, 0f, 0.9f, 9.2f, 0.4f, steel, ga, true, 6, 5)
+            b.mode = 2
+            b.sphere(0f, -19.5f, 0f, 1.5f, 9.8f, 0.8f, red, 0.35f * ga, false, 6, 5)
+            b.mode = 0
+            if (s > 0 && cs == 0 && cp < 0.36f) {
+                b.push()
+                b.tr(0f, -12f, 0f)
+                shuriken(12f, t * 900f, suitL, red, 1f)
+                b.pop()
+            }
+            b.pop()
+        }
+
+        // arco do corte básico
+        if (sp >= 0.22f && sp <= 0.85f) {
+            val kk = (sp - 0.22f) / 0.63f
+            val even = c.swingN % 2 == 0
+            b.mode = 2
+            b.push()
+            b.tr(0f, 38f, 0f)
+            b.rotX(if (even) -28f else 28f)
+            for (j in 0..10) {
+                val f = j / 10f
+                val an = (110f - 150f * f * min(1f, kk * 1.6f)) * 0.0174533f
+                val alp = 0.85f * (1f - kk) * (0.3f + 0.7f * f)
+                b.sphere(cos(an) * 25f, sin(an) * 25f, 0f, 3.8f, 3.8f, 1.1f, red, alp, false, 6, 4)
+                b.sphere(cos(an) * 25f, sin(an) * 25f, 0f, 2.2f, 2.2f, 0.8f, white, alp, false, 5, 3)
+            }
+            b.pop()
+            b.mode = 0
+        }
+        b.pop()
+        b.pop()
+        b.dq = 1f
+    }
+
+    private fun zedShadows(c: Champ) {
+        if (c.shT > 0f) {
+            val fa = if (c.shMoving) atan2(c.shTY - c.shY, c.shTX - c.shX) else c.face
+            shadowAt(c, c.shX, c.shY, if (c.shMoving) 2 else 1, fa)
+        }
+        if (c.rsT > 0f) {
+            val gy = groundH(c.rsX, c.rsY) + 1.6f
+            shadowAt(c, c.rsX, c.rsY, 1, c.face)
+            b.mode = 2
+
+            val k = (c.rsT / 4.5f).coerceIn(0f, 1f)
+            b.ring(c.rsX, gy, c.rsY, 44f * k + 6f, 44f * k + 9f, cc(0xFFFF1744), 0.8f, false, 28)
+            b.mode = 0
+        }
+    }
+
+    private fun shadowAt(c: Champ, x: Float, y: Float, mode: Int, fa: Float) {
+        val gy = groundH(x, y)
+        b.push()
+        b.tr(x, gy, y)
+        b.rotY(-Math.toDegrees(fa.toDouble()).toFloat())
+        b.sc(1.35f, 1.35f, 1.35f)
+        zed(c, true, mode)
+        b.pop()
+        b.mode = 2
+        b.ring(x, gy + 1.4f, y, 30f, 34f, cc(0xFFFF2A3A), 0.35f + 0.25f * sin(t * 6f), false, 24)
+        b.mode = 0
+    }
+
+    private fun deathMark(u: U) {
+        val gy = groundH(u.x, u.y) + 118f
+        val k = (u.deathT / 3f).coerceIn(0f, 1f)
+        val rr = cc(0xFFFF1744)
+        b.mode = 2
+        b.push()
+        b.tr(u.x, gy, u.y)
+        b.rotY(t * 120f)
+        b.ring(0f, 0f, 0f, 24f, 28f, rr, 0.9f, false, 26)
+        b.ring(0f, 0f, 0f, 5f + 18f * k, 7f + 18f * k, white, 0.9f, false, 22)
+        for (i in 0 until 6) {
+            b.push()
+            b.rotY(i * 60f)
+
+            b.box(26f, 0f, 0f, 10f, 1.4f, 3f, rr, 0.9f, false)
+            b.pop()
+        }
+        b.pop()
+        b.cyl(u.x, gy - 28f, u.y, 0f, 7f, 22f, rr, 6, 0.9f, false)
+        b.mode = 0
+    }
+
+    // ------------------------------------------------------------------ GAREN
+
+    private fun garen(c: Champ) {
+        b.dq = 0.8f
+        val ally = c.team == 0
+        val armor = if (ally) cc(0xFF2E5EC4) else cc(0xFF9A2E3C)
+        val armorD = if (ally) cc(0xFF1D3D8A) else cc(0xFF65202A)
+        val steel = cc(0xFFC3CCDB)
+        val steelD = cc(0xFF8D98AD)
+        val gold = if (ally) cc(0xFFFFD54F) else cc(0xFFE8C06A)
+        val goldD = cc(0xFFC9972B)
+        val cape = if (ally) cc(0xFF24459E) else cc(0xFF6E1F2A)
+        val skin = cc(0xFFF1C6A2)
+        val skinD = cc(0xFFD9A57F)
+        val hair = cc(0xFF5A3A22)
+        val glow = if (ally) cc(0xFFFFF3B0) else cc(0xFFFFB3B3)
+        val amp = (c.mv / 0.1f).coerceIn(0f, 1f)
+        val ph = c.walk * 1.05f
+        val sw = sin(ph) * amp
+        val bob = abs(sin(ph)) * 2.0f * amp + sin(t * 1.8f) * 0.5f
+        val casting = c.castT > 0f
+        val cp = if (casting) (1f - c.castT / c.castMax).coerceIn(0f, 1f) else 1f
+        val cs = if (casting) c.castS else -1
+        val spinning = c.spinT > 0f
+
+        val sp = if (c.swing > 0f && !casting && !spinning) (1f - c.swing / c.swingMax).coerceIn(0f, 1f) else -1f
+        val big = c.swingBig
+        val even = c.swingN % 2 == 0
+        val idleA = 24f - sw * 12f
+        val idleFt = if (c.qT > 0f) -38f else 22f
+        var armA = idleA
+        var elbA = 26f
+        var ft = idleFt
+        var armL = sw * 26f
+        var elbL = 12f
+        var spL = 8f
+        var lean = amp * 5f
+        var twist = 0f
+        var crouch = 0f
+        var spinA = 0f
+        var sparkle = if (c.qT > 0f) 1f else 0f
+        if (spinning || cs == 2) {
+            val ramp = if (spinning) 1f else smooth(cp / 0.9f)
+            spinA = if (spinning) (t * 1100f) % 360f else ramp * 540f
+            armA = 88f; elbA = 0f; ft = 90f
+            armL = 88f; elbL = 0f; spL = 60f
+            lean = 12f * ramp
+            crouch = 5f * ramp
+            sparkle = 1f
+        } else if (cs >= 0) {
+            when (cs) {
+                0 -> {
+                    val h = smooth(cp / 0.25f) * (1f - smooth((cp - 0.7f) / 0.3f))
+                    lean = amp * 5f + 20f * h
+                    crouch = 3f * h
+                    armA = idleA + (-70f - idleA) * h
+                    ft = idleFt + (-105f - idleFt) * h
+
+                    armL = armL + (-40f - armL) * h
+                    sparkle = 1f
+                }
+                1 -> {
+                    val up = smooth(cp / 0.35f)
+                    val pln = smooth((cp - 0.45f) / 0.2f)
+                    val rec = smooth((cp - 0.82f) / 0.18f)
+                    armA = (idleA + (165f - idleA) * up - 105f * pln) * (1f - rec) + idleA * rec
+                    ft = (idleFt * (1f - up) + 170f * pln) * (1f - rec) + idleFt * rec
+                    armL = 70f * pln * (1f - rec)
+                    elbL = 30f * pln
+                    crouch = 5f * pln * (1f - rec)
+                    lean = 8f * pln * (1f - rec)
+                    sparkle = 1f
+                }
+                3 -> {
+                    val rise = smooth(cp / 0.5f)
+                    val slam = smooth((cp - 0.5f) / 0.14f)
+                    val rec = smooth((cp - 0.78f) / 0.22f)
+                    val rl = 1f - rec
+                    armA = (idleA + (175f - idleA) * rise - 120f * slam) * rl + idleA * rec
+                    ft = (idleFt * (1f - rise) - 5f * rise + 150f * slam) * rl + idleFt * rec
+                    armL = (160f * rise - 110f * slam) * rl
+                    elbL = 10f
+                    lean = (-8f * rise + 36f * slam) * rl
+                    crouch = 6f * slam * rl
+                    spL = 14f
+                    sparkle = 1f
+                }
+            }
+        } else if (sp >= 0f) {
+            val wind = smooth(sp / 0.28f)
+
+            val strike = smooth((sp - 0.28f) / 0.22f)
+            val rec = smooth((sp - 0.62f) / 0.38f)
+            val rl = 1f - rec
+            if (even) {
+                armA = (idleA + 130f * wind - 105f * strike) * rl + idleA * rec
+                ft = ((idleFt - 85f * wind) + 210f * strike) * rl + idleFt * rec
+                twist = (-10f * wind + 20f * strike) * rl
+                lean = (4f + 12f * strike) * rl
+            } else {
+                armA = (idleA + 60f * wind) * rl + idleA * rec
+                ft = ((idleFt - 70f * wind) + 190f * strike) * rl + idleFt * rec
+                twist = (-45f * wind + 95f * strike) * rl
+                lean = (6f + 6f * strike) * rl
+            }
+            armL = armL - 20f * wind * rl
+            if (big) { crouch = 3f * wind * rl; sparkle = 1f }
+        }
+
+        b.push()
+        if (spinA != 0f) b.rotY(spinA)
+        if (sparkle > 0f || c.wT > 0f) {
+            b.mode = 2
+            b.disc(0f, 0.9f, 0f, 34f, glow, 0.10f, false, 22)
+            b.mode = 0
+        }
+        // pernas
+        for (s in intArrayOf(-1, 1)) {
+            val swing = s * sw
+            val back = max(0f, -swing)
+            b.push()
+            b.tr(0f, 27.5f - crouch, s * 5.2f)
+            b.rotZ(swing * 28f + crouch * 2.5f)
+
+            limb(11f, 4.4f, 3.7f, K(armorD), 12)
+            b.sphere(0f, -11f, 0f, 3.9f, 3.9f, 3.9f, K(steelD), 1f, true, 10, 6)
+            b.tr(0f, -11f, 0f)
+            b.rotZ(-back * 36f - 3f - crouch * 4f)
+            limb(10f, 3.7f, 3.2f, K(steel), 12)
+            b.cyl(0f, -9f, 0f, 3.5f, 3.8f, 2f, K(gold), 12)
+            b.sphere(3.2f, -10.6f, 0f, 5.8f, 2.8f, 3.9f, K(armorD), 1f, true, 10, 6)
+            b.sphere(7.5f, -10.8f, 0f, 2.6f, 2.2f, 3.0f, K(steel), 1f, true, 8, 5)
+            b.pop()
+        }
+
+        // corpo
+        b.push()
+        b.tr(0f, 27f + bob - crouch * 0.6f, 0f)
+        b.rotZ(-lean)
+        b.rotY(twist)
+        b.tr(0f, -27f, 0f)
+        b.cyl(0f, 21f, 0f, 9.4f, 8.6f, 7f, K(armorD), 14)
+        for (i in 0 until 9) {
+            val fl2 = amp * 7f * abs(sin(ph + i * 0.6f)) + sin(t * 1.8f + i) * 1.2f
+            b.push()
+            b.rotY(i * 40f + 8f)
+            b.tr(7.6f, 28.4f, 0f)
+            b.rotZ(18f + fl2)
+            b.sphere(0.6f, -6f, 0f, 1.5f, 7.2f, 3.6f, K(if (i % 2 == 0) armor else steel), 1f, true, 8, 5)
+            b.sphere(0.9f, -12.4f, 0f, 1.6f, 1.6f, 3.2f, K(gold), 1f, true, 6, 4)
+            b.pop()
+        }
+        b.cyl(0f, 27.6f, 0f, 8.6f, 8.0f, 2.8f, K(gold), 14)
+        b.sphere(8.2f, 29f, 0f, 2.4f, 2.4f, 2.4f, K(steel), 1f, true, 8, 5)
+        b.cyl(0f, 29.5f, 0f, 8.2f, 10.0f, 12.5f, K(steel), 16)
+        b.sphere(5.2f, 36.2f, 0f, 4.4f, 5.6f, 8.6f, K(armor), 1f, true, 10, 6)
+
+        for (s in intArrayOf(-1, 1)) {
+            b.push()
+            b.tr(8.6f, 37.4f, s * 3.4f)
+            b.rotX(-s * 28f)
+            b.sphere(0f, 0f, 0f, 1.0f, 1.6f, 4.2f, K(gold), 1f, true, 6, 4)
+            b.pop()
+        }
+        b.sphere(9.2f, 36f, 0f, 1.5f, 3.2f, 1.5f, K(goldD), 1f, true, 6, 4)
+        b.cyl(0f, 41.2f, 0f, 7.6f, 5.2f, 3.4f, K(steelD), 14)
+        for (s in intArrayOf(-1, 1)) {
+            b.sphere(0f, 42.2f, s * 11.6f, 6.2f, 4.6f, 6.4f, K(steel), 1f, true, 12, 7)
+            b.sphere(0f, 44.2f, s * 11.8f, 5.2f, 2.0f, 5.4f, K(armor), 1f, true, 10, 5)
+            b.sphere(0f, 42.4f, s * 11.6f, 6.4f, 0.9f, 6.6f, K(gold), 1f, true, 10, 4)
+            b.sphere(0f, 47.2f, s * 13.4f, 1.2f, 3.4f, 1.2f, K(gold), 1f, true, 6, 4)
+        }
+        // capa
+        b.push()
+        b.tr(-7.6f, 42f, 0f)
+        for (i in 0 until 4) {
+            val sway = sin(t * 2.6f + i * 0.7f) * 3f
+            b.rotZ(-(7f + amp * 13f) + sway)
+            b.box(-0.8f, -4.8f, 0f, 1.5f, 9.8f, 17f - i * 1.5f, K(cape), 1f, true)
+            b.tr(0f, -9.3f, 0f)
+        }
+        b.pop()
+        // cabeça
+        b.push()
+        b.tr(1f, 49f, 0f)
+        b.rotZ(lean * 0.45f)
+        b.sphere(0f, 0f, 0f, 5.4f, 6.0f, 5.2f, K(skin), 1f, true, 12, 8)
+        b.sphere(2.6f, -3.2f, 0f, 3.2f, 2.4f, 4.0f, K(skinD), 1f, true, 8, 5)
+        b.sphere(-0.8f, 2.4f, 0f, 5.8f, 4.4f, 5.6f, K(hair), 1f, true, 10, 6)
+
+        b.sphere(3.4f, 4.2f, 0f, 3.0f, 2.2f, 4.6f, K(hair), 1f, true, 8, 5)
+        for (s in intArrayOf(-1, 1)) {
+            b.sphere(5.1f, 0.8f, s * 2.1f, 0.9f, 1.2f, 1.2f, K(cc(0xFF263238)), 1f, false, 6, 4)
+            b.box(5.0f, 2.4f, s * 2.1f, 0.8f, 0.7f, 2.6f, K(hair), 1f, false)
+        }
+        b.sphere(5.6f, -0.8f, 0f, 1.1f, 1.2f, 1.1f, K(skinD), 1f, true, 6, 4)
+        b.pop()
+        // braços e espada
+        for (s in intArrayOf(-1, 1)) {
+            val aA = if (s > 0) armA else armL
+            val eA = if (s > 0) elbA else elbL
+            val spr = if (s > 0) 7f else spL
+            b.push()
+            b.tr(0f, 41.6f, s * 11.8f)
+            b.rotX(-s * spr)
+            b.rotZ(aA)
+            limb(9.4f, 3.5f, 3.0f, K(steel), 12)
+            b.sphere(0f, -9.4f, 0f, 3.4f, 3.4f, 3.4f, K(armor), 1f, true, 10, 6)
+            b.tr(0f, -9.4f, 0f)
+            b.rotZ(eA)
+            limb(8.6f, 3.0f, 2.8f, K(steelD), 12)
+            b.cyl(0f, -9.2f, 0f, 3.5f, 3.2f, 3.6f, K(gold), 12)
+            b.sphere(0f, -10.8f, 0f, 3.1f, 3.3f, 3.1f, K(steel), 1f, true, 10, 6)
+            if (s > 0) {
+                b.tr(0f, -10.8f, 0f)
+                b.rotZ(-ft - aA - eA)
+                b.cyl(0f, -6f, 0f, 1.5f, 1.5f, 10f, K(cc(0xFF4E342E)), 8)
+                b.sphere(0f, -7f, 0f, 2.3f, 2.3f, 2.3f, K(gold), 1f, true, 8, 5)
+                b.box(0f, 4.6f, 0f, 15f, 2.6f, 2.6f, K(gold), 1f, true)
+                b.sphere(7.6f, 4.6f, 0f, 1.8f, 1.8f, 1.8f, K(goldD), 1f, true, 6, 4)
+                b.sphere(-7.6f, 4.6f, 0f, 1.8f, 1.8f, 1.8f, K(goldD), 1f, true, 6, 4)
+                b.box(0f, 38f, 0f, 7.2f, 66f, 1.7f, K(steel), 1f, true)
+
+                b.box(0f, 36f, 0f, 2.0f, 58f, 2.0f, K(steelD), 1f, true)
+                b.sphere(0f, 73.5f, 0f, 3.5f, 6.5f, 1.0f, K(steel), 1f, true, 6, 4)
+                if (sparkle > 0f || c.wT > 0f) {
+                    b.mode = 2
+                    val gp = 0.28f + 0.1f * sin(t * 9f)
+                    b.box(0f, 38f, 0f, 10.5f, 70f, 3.6f, glow, gp, false)
+                    b.sphere(0f, 38f, 0f, 9f, 40f, 4f, glow, 0.10f, false, 8, 6)
+                    b.mode = 0
+                }
+            }
+            b.pop()
+        }
+        // rastro da espada
+        if (sp >= 0.25f && sp <= 0.9f) {
+            val kk = (sp - 0.25f) / 0.65f
+            b.mode = 2
+            b.push()
+            b.tr(0f, 41.6f, 11.8f)
+            b.rotX(if (even) 0f else 38f)
+            val a0 = if (even) -65f else -50f
+            val a1 = if (even) 150f else 140f
+            val prog = min(1f, kk * 1.7f)
+            for (j in 0..13) {
+                val f = j / 13f
+                val ang = a0 + (a1 - a0) * f * prog
+                val rad = ang * 0.0174533f
+                val alp = (0.7f * (1f - kk) * (0.25f + 0.75f * f) * (if (big) 1.3f else 1f)).coerceAtMost(1f)
+                b.push()
+                b.tr(sin(rad) * 70f, cos(rad) * 70f, 0f)
+                b.rotZ(-ang)
+                b.box(0f, 0f, 0f, 7.5f, 22f, 1.4f, if (big) glow else white, alp, false)
+                b.pop()
+
+            }
+            b.pop()
+            b.mode = 0
+        }
+        // barreira de coragem (W)
+        if (c.wT > 0f) {
+            val k = (c.wT / 2.4f).coerceIn(0f, 1f)
+            b.mode = 2
+            b.sphere(0f, 36f, 0f, 36f, 42f, 36f, glow, 0.14f + 0.05f * sin(t * 8f), false, 16, 10)
+            b.ring(0f, 14f, 0f, 33f, 37f, glow, 0.5f * k, false, 28)
+            for (kk in 0 until 6) {
+                val a = -t * 2.2f + kk * 1.047f
+                b.sphere(cos(a) * 36f, 36f + sin(t * 3f + kk) * 14f, sin(a) * 36f, 2.2f, 2.2f, 2.2f, white, 0.8f, false, 5, 3)
+            }
+            b.mode = 0
+        }
+        b.pop()
+        b.pop()
+        b.dq = 1f
+    }
+
+    /** Redemoinho do Julgamento (E), em escala de mundo. */
+    private fun spinFx(c: Champ) {
+        val gy = groundH(c.x, c.y)
+        val inK = smooth((2.4f - c.spinT) / 0.15f)
+        val outK = smooth(c.spinT / 0.25f)
+        val fade = min(inK, outK)
+        val ang = t * 1100f
+        val gold = cc(0xFFFFE9A0)
+        b.mode = 2
+        b.push()
+        b.tr(c.x, gy + 44f, c.y)
+
+        for (i in 0 until 3) {
+            for (j in 0 until 7) {
+                b.push()
+                b.rotY(-(ang + i * 120f - j * 10f))
+                val a = 0.5f * (1f - j / 7f) * fade
+                b.sphere(170f, 0f, 0f, 78f, 3.2f - j * 0.2f, 12f - j, if (j == 0) white else gold, a, false, 8, 4)
+                b.pop()
+            }
+        }
+        b.ring(0f, -3f, 0f, 120f, 252f, gold, 0.10f * fade, false, 36)
+        b.ring(0f, -3f, 0f, 236f, 250f, white, 0.5f * fade, false, 36)
+        b.ring(0f, -42f, 0f, 200f, 252f, gold, 0.18f * fade, false, 36)
+        for (i in 0 until 10) {
+            val aa = t * 7f + i * 0.628f
+            val hh = (t * 120f + i * 31f) % 120f
+            val rd = 150f + 40f * sin(i * 1.3f)
+            b.sphere(cos(aa) * rd, -40f + hh, sin(aa) * rd, 3f, 3f, 3f, white, 0.5f * fade * (1f - hh / 120f), false, 5, 3)
+        }
+        b.pop()
+        b.mode = 0
+    }
+
+    // ------------------------------------------------------ EFEITOS DE HABILIDADE
+
+    private fun fx(f: Fx) {
+        val k = (f.age / f.max).coerceIn(0f, 1f)
+        val gy = groundH(f.x, f.y)
+        val rr = cc(0xFFFF2A3A)
+        val gold = cc(0xFFFFE9A0)
+        when (f.kind) {
+            0, 9 -> {
+                b.mode = 0
+
+                for (i in 0 until 9) {
+                    val a = i * 0.7f
+                    val rd = 8f + 46f * k
+                    val h = 10f + 70f * k + (i % 3) * 8f
+                    val sz = (14f + 10f * (i % 3)) * (1f - 0.4f * k)
+                    b.sphere(f.x + cos(a) * rd, gy + h, f.y + sin(a) * rd, sz, sz, sz, cc(0xFF140A1E), 0.55f * (1f - k), false, 7, 5)
+                }
+                b.mode = 2
+                b.ring(f.x, gy + 1.5f, f.y, 20f + 90f * k, 26f + 90f * k, rr, 0.8f * (1f - k), false, 30)
+                b.cyl(f.x, gy, f.y, 22f * (1f - k) + 6f, 6f, 150f * (1f - k * 0.4f), rr, 10, 0.22f * (1f - k), false)
+                for (i in 0 until 8) {
+                    val a = i * 0.785f + t * 3f
+                    val rd = 30f + 60f * k
+                    b.sphere(f.x + cos(a) * rd, gy + 8f + 80f * k * ((i % 3) + 1) / 3f, f.y + sin(a) * rd, 2.8f, 2.8f, 2.8f, white, 0.8f * (1f - k), false, 5, 3)
+                }
+                b.mode = 0
+            }
+            1 -> {
+                val e = 1f - (1f - k) * (1f - k)
+                val rad = 235f
+                b.mode = 2
+                b.disc(f.x, gy + 1f, f.y, rad * e, rr, 0.10f * (1f - k), false, 36)
+                b.ring(f.x, gy + 1.5f, f.y, rad * e - 10f, rad * e + 4f, rr, 0.85f * (1f - k), false, 44)
+                b.ring(f.x, gy + 1.7f, f.y, rad * e * 0.7f, rad * e * 0.7f + 3f, white, 0.7f * (1f - k), false, 40)
+                for (i in 0 until 8) {
+                    b.push()
+                    b.tr(f.x, gy + 34f, f.y)
+                    b.rotY(i * 45f + e * 260f)
+                    b.box(rad * e * 0.85f, 0f, 0f, 70f * (1f - k * 0.5f), 2.2f, 6f, if (i % 2 == 0) white else rr, 0.9f * (1f - k), false)
+                    b.pop()
+                }
+                b.ring(f.x, gy + 34f, f.y, rad * e * 0.5f, rad * e, rr, 0.18f * (1f - k), false, 40)
+
+                b.mode = 0
+            }
+            3 -> {
+                val e = 1f - (1f - k) * (1f - k)
+                val red = cc(0xFFFF1744)
+                b.mode = 2
+                for (i in 0 until 3) {
+                    val kk = ((k * 1.4f) - i * 0.18f).coerceIn(0f, 1f)
+                    b.ring(f.x, gy + 1.5f + i, f.y, 40f + 280f * kk, 50f + 285f * kk, red, 0.8f * (1f - kk), false, 40)
+                }
+                b.cyl(f.x, gy, f.y, 40f * (1f - k) + 10f, 4f, 600f * (1f - k * 0.6f), red, 12, 0.35f * (1f - k), false)
+                b.cyl(f.x, gy, f.y, 20f * (1f - k) + 5f, 2f, 700f, white, 10, 0.5f * (1f - k), false)
+                b.push()
+                b.tr(f.x, gy + 60f, f.y)
+                b.rotY(k * 200f)
+                b.box(0f, 0f, 0f, 260f * e, 2f, 6f, red, 0.8f * (1f - k), false)
+                b.box(0f, 0f, 0f, 6f, 2f, 260f * e, red, 0.8f * (1f - k), false)
+                b.pop()
+                b.sphere(f.x, gy + 50f, f.y, 70f * (1f - k), 70f * (1f - k), 70f * (1f - k), red, 0.4f * (1f - k), false, 12, 8)
+                b.mode = 0
+            }
+            4 -> {
+                val e = smooth(k / 0.35f)
+                val fade = 1f - smooth((k - 0.4f) / 0.6f)
+                b.mode = 2
+                for (i in 0..1) {
+                    val sg = if (i == 0) 1f else -1f
+                    b.push()
+                    b.tr(f.x, gy + 58f, f.y)
+                    b.rotZ(38f * sg)
+                    b.box(0f, 0f, 0f, 230f * e, 7f, 3f, rr, 0.9f * fade, false)
+                    b.box(0f, 0f, 0f, 250f * e, 2.4f, 4f, white, fade, false)
+
+                    b.pop()
+                    b.push()
+                    b.tr(f.x, gy + 40f, f.y)
+                    b.rotY(38f * sg)
+                    b.box(0f, 0f, 0f, 230f * e, 3f, 8f, rr, 0.7f * fade, false)
+                    b.box(0f, 0f, 0f, 250f * e, 2f, 3f, white, 0.9f * fade, false)
+                    b.pop()
+                }
+                b.sphere(f.x, gy + 58f, f.y, 46f * e * fade, 46f * e * fade, 46f * e * fade, rr, 0.35f * fade, false, 10, 7)
+                b.ring(f.x, gy + 2f, f.y, 30f + 120f * e, 36f + 120f * e, rr, 0.7f * fade, false, 30)
+                b.mode = 0
+            }
+            5 -> {
+                val e = smooth(k / 0.3f)
+                val fade = 1f - smooth((k - 0.35f) / 0.65f)
+                b.mode = 2
+                b.push()
+                b.tr(f.x, gy + 50f, f.y)
+                b.rotY(-Math.toDegrees(f.ang.toDouble()).toFloat())
+                for (j in 0..11) {
+                    val a = (-80f + 160f * j / 11f * e) * 0.0174533f
+                    b.sphere(sin(a) * 70f, cos(a) * 70f - 24f, 0f, 9f, 9f, 3f, if (j > 8) white else gold, 0.8f * fade, false, 6, 4)
+                }
+                b.pop()
+                b.ring(f.x, gy + 2f, f.y, 20f + 110f * e, 28f + 110f * e, gold, 0.8f * fade, false, 30)
+                b.sphere(f.x, gy + 46f, f.y, 40f * e * fade, 40f * e * fade, 40f * e * fade, gold, 0.3f * fade, false, 10, 7)
+                b.mode = 0
+            }
+            6 -> {
+                b.mode = 2
+                for (i in 0 until 3) {
+                    val kk = (k * 1.3f - i * 0.2f).coerceIn(0f, 1f)
+
+                    b.ring(f.x, gy + 2f + i * 22f * kk, f.y, 30f + 70f * kk, 36f + 70f * kk, if (i == 0) white else gold, 0.8f * (1f - kk), false, 30)
+                }
+                b.cyl(f.x, gy, f.y, 36f * (1f - k) + 8f, 8f, 130f * (0.4f + 0.6f * (1f - k)), gold, 12, 0.22f * (1f - k), false)
+                for (i in 0 until 10) {
+                    val a = i * 0.628f
+                    val rd = 40f + 50f * k
+                    val hh = 10f + 100f * k
+                    b.sphere(f.x + cos(a) * rd, gy + hh * ((i % 3) + 1) / 3f, f.y + sin(a) * rd, 3f, 3f, 3f, white, 0.9f * (1f - k), false, 5, 3)
+                }
+                b.mode = 0
+            }
+            7 -> {
+                b.mode = 2
+                b.ring(f.x, gy + 2f, f.y, 120f + 140f * k, 130f + 140f * k, white, 0.8f * (1f - k), false, 40)
+                b.ring(f.x, gy + 2.3f, f.y, 90f + 120f * k, 98f + 120f * k, gold, 0.6f * (1f - k), false, 36)
+                b.mode = 0
+            }
+            8 -> justiceFx(f, gy)
+        }
+    }
+
+    private fun justiceFx(f: Fx, gy: Float) {
+        val a = f.age
+        val gold = cc(0xFFFFE9A0)
+        val fall = (a / 0.7f).coerceIn(0f, 1f)
+        val hh = 900f * (1f - fall * fall)
+        val after = ((a - 0.7f) / 0.9f).coerceIn(0f, 1f)
+        b.mode = 2
+        if (a < 0.7f) {
+            val rw = 260f - 170f * fall
+            b.disc(f.x, gy + 1.2f, f.y, rw, gold, 0.10f + 0.12f * fall, false, 36)
+            b.ring(f.x, gy + 1.6f, f.y, rw - 8f, rw, white, 0.9f, false, 40)
+            b.ring(f.x, gy + 1.7f, f.y, rw * 0.55f, rw * 0.55f + 4f, gold, 0.7f, false, 36)
+            for (i in 0 until 8) {
+                b.push()
+                b.tr(f.x, gy + 1.8f, f.y)
+                b.rotY(i * 45f + t * 90f)
+                b.box(rw * 0.78f, 0f, 0f, 22f, 0.5f, 3f, white, 0.8f, false)
+                b.pop()
+            }
+            b.cyl(f.x, gy, f.y, 40f, 40f, 1100f, gold, 12, 0.08f + 0.10f * fall, false)
+        }
+        b.mode = 0
+        if (after < 1f) {
+            val alpha = if (a < 0.7f) 1f else (1f - after).coerceIn(0f, 1f)
+            b.push()
+            b.tr(f.x, gy + hh, f.y)
+            b.cyl(0f, 0f, 0f, 0f, 24f, 70f, cc(0xFFEAF2FF), 4, alpha, true)
+            b.box(0f, 200f, 0f, 46f, 260f, 12f, cc(0xFFDDE8FA), alpha, true)
+            b.box(0f, 200f, 0f, 14f, 250f, 14f, white, alpha, true)
+            b.box(0f, 338f, 0f, 150f, 16f, 22f, cc(0xFFFFD54F), alpha, true)
+            b.cyl(0f, 346f, 0f, 9f, 9f, 100f, cc(0xFF8D6E63), 8, alpha, true)
+            b.sphere(0f, 452f, 0f, 16f, 16f, 16f, cc(0xFFFFD54F), alpha, true, 8, 6)
+            b.mode = 2
+            b.box(0f, 200f, 0f, 70f, 280f, 30f, gold, 0.25f * alpha, false)
+            b.sphere(0f, 120f, 0f, 60f, 130f, 60f, white, 0.18f * alpha, false, 10, 8)
+            b.mode = 0
+            b.pop()
+        }
+        if (a >= 0.7f) {
+            val e = after
+            b.mode = 2
+            for (i in 0 until 3) {
+                val kk = (e * 1.2f - i * 0.16f).coerceIn(0f, 1f)
+                b.ring(f.x, gy + 2f + i, f.y, 40f + 300f * kk, 52f + 300f * kk, if (i == 0) white else gold, 0.9f * (1f - kk), false, 44)
+            }
+            b.cyl(f.x, gy, f.y, 50f * (1f - e) + 10f, 8f, 700f * (1f - e * 0.5f), gold, 14, 0.4f * (1f - e), false)
+            b.cyl(f.x, gy, f.y, 20f * (1f - e) + 4f, 2f, 800f, white, 10, 0.6f * (1f - e), false)
+            for (i in 0 until 14) {
+                val ang = i * 0.449f
+                val rd = 30f + 200f * e
+                val hy = 20f + 150f * e * (0.4f + (i % 4) * 0.2f)
+                b.sphere(f.x + cos(ang) * rd, gy + hy, f.y + sin(ang) * rd, 4f, 4f, 4f, white, 0.9f * (1f - e), false, 5, 3)
+            }
+            b.mode = 0
+        }
+    }
+
+    private fun aimNew(pl: Champ) {
+        val fill = if (pl.hero == 2) cc(0xFFFF4D4D) else cc(0xFFFFD54F)
+        val edge = if (pl.hero == 2) cc(0xFFB71C1C) else cc(0xFFC97A00)
+        val tip = cc(0xFFFFF0E0)
+        for (i in 0..3) {
+            if (g.bId[i] == -1 || !g.bDrag[i]) continue
+            val ang = atan2(g.bAy[i], g.bAx[i])
+            val gy = groundH(pl.x, pl.y) + 1.8f
+            val dist = (sqrt(g.bAx[i] * g.bAx[i] + g.bAy[i] * g.bAy[i]) / g.d * 3.2f).coerceIn(150f, 780f)
+            var kind = 1
+            var rad = 0f
+            var len = 0f
+            var wd = 0f
+            if (pl.hero == 2) {
+                when (i) {
+                    0 -> { kind = 0; len = 900f; wd = 72f }
+                    1 -> { kind = 3; len = dist.coerceIn(280f, 650f) }
+                    2 -> { kind = 1; rad = 235f }
+                    else -> { kind = 1; rad = 700f }
+                }
+            } else {
+                when (i) {
+                    0 -> { kind = 1; rad = 70f }
+                    1 -> { kind = 1; rad = 75f }
+                    2 -> { kind = 1; rad = 250f }
+                    else -> { kind = 1; rad = 560f }
+                }
+            }
+            b.push()
+            b.tr(pl.x, gy, pl.y)
+            b.mode = 0
+            if (kind == 1) {
+                val pr = 1f + 0.03f * sin(t * 7f)
+                b.disc(0f, 0f, 0f, rad * pr, fill, 0.14f, false, 40)
+                b.ring(0f, 0.1f, 0f, rad * pr - 4f, rad * pr, edge, 0.8f, false, 48)
+                for (j in 0 until 10) {
+                    b.push()
+                    b.rotY(j * 36f + t * 20f)
+                    b.box(rad * 0.9f, 0.2f, 0f, 18f, 0.3f, 2.6f, tip, 0.6f, false)
+                    b.pop()
+                }
+            } else {
+                b.rotY(-Math.toDegrees(ang.toDouble()).toFloat())
+                if (kind == 0) {
+                    val n = 8
+                    val sl = len / n
+                    for (k in 0 until n) {
+                        val al = 0.32f * (1f - 0.78f * k / n)
+                        b.box(sl * (k + 0.5f), 0f, 0f, sl + 0.5f, 0.3f, wd, fill, al, false)
+                    }
+                    b.box(len / 2f, 0.2f, wd / 2f, len, 0.3f, 1.6f, edge, 0.7f, false)
+                    b.box(len / 2f, 0.2f, -wd / 2f, len, 0.3f, 1.6f, edge, 0.7f, false)
+                    b.box(len, 0.2f, 0f, 1.8f, 0.3f, wd + 1.6f, edge, 0.7f, false)
+                    val cn = (len / 130f).toInt().coerceAtLeast(3)
+                    for (j in 0 until cn) {
+                        val px = (t * 360f + j * len / cn) % len
+                        val fa = 0.1f + 0.6f * (1f - px / len)
+                        b.push()
+                        b.tr(px, 0.4f, 0f)
+                        for (s in intArrayOf(-1, 1)) {
+                            b.push()
+                            b.rotY(s * 40f)
+                            b.box(-wd * 0.15f, 0f, 0f, wd * 0.36f, 0.3f, 2.4f, tip, fa, false)
+                            b.pop()
+                        }
+                        b.pop()
+                    }
+                } else {
+                    val dn = (len / 40f).toInt()
+                    for (j in 1 until dn) b.box(j * 40f, 0.1f, 0f, 9f, 0.3f, 2.4f, edge, 0.55f, false)
+                    b.disc(len, 0f, 0f, 70f, fill, 0.2f, false, 28)
+                    b.ring(len, 0.2f, 0f, 66f, 70f, edge, 0.8f, false, 32)
+                }
+            }
+            b.pop()
+        }
+    }
+
+    private fun midSeal() {
+        val mx = MAP_W / 2f
+        val my = groundH(mx, 640f) + 2.4f
+        val pu = 0.5f + 0.5f * sin(t * 1.6f)
+        val ice = cc(0xFFBFE6FF)
+        b.mode = 2
+        b.disc(mx, my, 640f, 140f, cc(0xFF9FD8FF), 0.07f + 0.05f * pu, false, 36)
+        b.ring(mx, my, 640f, 150f, 158f, ice, 0.55f, false, 48)
+        b.ring(mx, my + 0.1f, 640f, 96f, 100f, white, 0.5f, false, 40)
+        for (i in 0 until 12) {
+            b.push()
+            b.tr(mx, my + 0.2f, 640f)
+            b.rotY(i * 30f + t * 18f)
+            b.box(124f, 0f, 0f, 26f, 0.5f, 3.6f, ice, 0.7f, false)
+            b.pop()
+        }
+        for (i in 0 until 4) {
+            val a = t * 0.6f + i * 1.5708f
+            b.cyl(mx + cos(a) * 128f, my, 640f + sin(a) * 128f, 5f, 2f, 90f + 30f * pu, if (i % 2 == 0) cc(0xFF4FC3F7) else cc(0xFFFF6E5C), 6, 0.35f, false)
+        }
+        b.mode = 0
+    }
+
 
     // ------------------------------------------------------- CAMPEÃ (LUX)
 
@@ -1415,6 +2361,29 @@ class Scene(private val g: GameView) {
             b.cyl(0f, 0f, 0f, 2.8f, 0f, 6f, if (fl) white else team, 4, 1f, false)
             b.pop()
         }
+
+        // círculo rúnico girando na base, faíscas subindo e halo no topo
+        b.mode = 2
+        b.push()
+        b.tr(0f, 1.6f, 0f)
+        b.rotY(t * 18f)
+        b.ring(0f, 0f, 0f, 78f, 82f, team, 0.55f, false, 40)
+        b.ring(0f, 0.1f, 0f, 64f, 66f, teamL, 0.4f, false, 36)
+        for (i in 0 until 8) {
+            b.push()
+            b.rotY(i * 45f)
+            b.box(72f, 0f, 0f, 14f, 0.5f, 2.6f, teamL, 0.7f, false)
+            b.box(88f, 0f, 0f, 3f, 0.5f, 7f, team, 0.6f, false)
+            b.pop()
+        }
+        b.pop()
+        for (i in 0 until 7) {
+            val kk = (t * 0.45f + i * 0.143f) % 1f
+            val a = i * 2.4f + t * 0.8f
+            b.box(cos(a) * (34f - 10f * kk), 20f + 150f * kk, sin(a) * (34f - 10f * kk), 2.6f, 2.6f, 2.6f, teamL, 0.8f * (1f - kk), false)
+        }
+        b.ring(0f, oy + 44f + sin(t * 1.5f) * 3f, 0f, 22f, 24f, gold, 0.5f, false, 28)
+        b.mode = 0
 
         // tochas ao pé da torre
         for (sd in intArrayOf(-1, 1)) {

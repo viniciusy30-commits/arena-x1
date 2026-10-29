@@ -98,6 +98,14 @@ class Champ(x: Float, y: Float, team: Int, val player: Boolean) : U(x, y, team, 
     var wT = 0f
     var spinT = 0f
     var spinTick = 0f
+    // Pikachu: investida elétrica (Ataque Rápido / Investida Trovão)
+    var vdT = 0f
+    var vdKind = 0
+    var vdAng = 0f
+    var vdLeft = 0f
+    var vdSpd = 0f
+    var vdDmg = 0f
+    val vdHit = HashSet<U>()
     val maxMana: Float get() = 400f + 40f * level
     val ap: Float get() = 55f + 12f * (level - 1) + gold / 25f
 }
@@ -165,10 +173,10 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal val fxs = ArrayList<Fx>()
     internal var picking = true
     internal var pickSel = 2
-    internal val pkl = FloatArray(4)
-    internal val pkt = FloatArray(4)
-    internal val pkr = FloatArray(4)
-    internal val pkb = FloatArray(4)
+    internal val pkl = FloatArray(5)
+    internal val pkt = FloatArray(5)
+    internal val pkr = FloatArray(5)
+    internal val pkb = FloatArray(5)
     internal val lock = Any()
     internal val vp = FloatArray(16)
     internal val camPos = FloatArray(3)
@@ -199,7 +207,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal val COST = floatArrayOf(50f, 60f, 70f, 100f)
     internal val RANGE = floatArrayOf(950f, 0f, 780f, 1700f)
     internal val CH_RANGE = 560f
-    internal val HERO_NAME = arrayOf("Lux", "Yasuo", "Yuki", "Garen")
+    internal val HERO_NAME = arrayOf("Lux", "Yasuo", "Yuki", "Garen", "Pikachu")
 
     // controles
     internal var joyId = -1
@@ -230,6 +238,12 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
                 c.cdBase[0] = 5.5f; c.cdBase[1] = 9f; c.cdBase[2] = 4.5f; c.cdBase[3] = 26f
             }
+            4 -> {
+                c.cost[0] = 35f; c.cost[1] = 25f; c.cost[2] = 40f; c.cost[3] = 80f
+                c.cdBase[0] = 4.5f; c.cdBase[1] = 8f; c.cdBase[2] = 7f; c.cdBase[3] = 24f
+                c.maxHp = 800f
+                c.hp = 800f
+            }
             3 -> {
                 c.cost[0] = 25f; c.cost[1] = 30f; c.cost[2] = 30f; c.cost[3] = 80f
                 c.cdBase[0] = 7f; c.cdBase[1] = 13f; c.cdBase[2] = 8f; c.cdBase[3] = 28f
@@ -243,7 +257,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     }
 
     private fun startMatch(h: Int) {
-        val pool = intArrayOf(0, 2, 3).filter { it != h }
+        val pool = intArrayOf(0, 2, 3, 4).filter { it != h }
         newGame(h, pool[rnd.nextInt(pool.size)])
         picking = false
     }
@@ -454,7 +468,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             }
         } else if (u is Champ) {
             u.shT = 0f; u.rsT = 0f; u.dashT = 0f; u.spinT = 0f; u.evT = 0f; u.hitT = 0f
-            u.qT = 0f; u.wT = 0f; u.deathT = 0f; u.swing = 0f
+            u.qT = 0f; u.wT = 0f; u.deathT = 0f; u.swing = 0f; u.vdT = 0f
             u.deaths++
             u.respawn = 4f + u.level * 1.5f
             shake = 0.6f
@@ -473,7 +487,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         while (c.level < 9 && c.xp >= 70f + 45f * c.level) {
             c.xp -= 70f + 45f * c.level
             c.level++
-            val add = if (c.hero == 3) 95f else 75f
+            val add = if (c.hero == 3) 95f else if (c.hero == 4) 80f else 75f
             c.maxHp += add
             c.hp += add
             texts.add(FT(c.x, c.y, "NIVEL " + c.level, 1.3f, C(0xFF69F0AE)))
@@ -586,6 +600,10 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
             if (c.evT <= 0f) castEvent(c)
         }
         if (c.spinT > 0f) updSpin(c, dt)
+        if (c.vdT > 0f) {
+            updVolt(c, dt)
+            return
+        }
         if (c.dashT > 0f) {
             updDash(c, dt)
             return
@@ -602,11 +620,12 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         }
     }
 
-    internal fun atkRange(c: Champ): Float = if (c.hero >= 2) 190f else CH_RANGE
+    internal fun atkRange(c: Champ): Float = if (c.hero == 4) 400f else if (c.hero >= 2) 190f else CH_RANGE
 
     private fun basicAttack(c: Champ, tg: U?) {
         if (tg == null || tg.dead || c.atkCd > 0f) return
-        if (c.spinT > 0f || c.dashT > 0f) return
+        if (c.spinT > 0f || c.dashT > 0f || c.vdT > 0f) return
+        if (c.hero == 4) { pikaAttack(c, tg); return }
         if (c.hero >= 2) { meleeAttack(c, tg); return }
         if (hypot(tg.x - c.x, tg.y - c.y) - tg.r > CH_RANGE + 20f) return
         c.atkCd = 0.7f
@@ -632,11 +651,12 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     }
 
     private fun cast(c: Champ, s: Int, ang: Float, dist: Float, recast: Boolean): Boolean {
-        if (c.dead || c.dashT > 0f) return false
+        if (c.dead || c.dashT > 0f || c.vdT > 0f) return false
         if (c.silT > 0f && !(c.hero == 2 && recast && ((s == 1 && c.shT > 0f) || (s == 3 && c.rsT > 0f)))) return false
 
         if (c.hero == 2) return castZed(c, s, ang, dist, recast)
         if (c.hero == 3) return castGaren(c, s, ang, dist)
+        if (c.hero == 4) return castPika(c, s, ang, dist)
         if (s == 2 && recast) {
             val z = zones.firstOrNull { it.owner === c }
             if (z != null) { z.life = 0f; return true }
@@ -678,6 +698,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     internal fun rangeOf(c: Champ, s: Int): Float = when (c.hero) {
         2 -> floatArrayOf(900f, 650f, 300f, 700f)[s]
         3 -> floatArrayOf(300f, 0f, 300f, 560f)[s]
+        4 -> floatArrayOf(850f, 440f, 250f, 720f)[s]
         else -> RANGE[s]
     }
 
@@ -699,6 +720,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
     // ------------------------------------------------------------------ IA
 
     private fun botThink(b: Champ, dt: Float) {
+        if (b.hero == 4) { botPika(b, dt); return }
         if (b.hero >= 2) { botMelee(b, dt); return }
         val p = pl
         val dp = if (p.dead || hiddenFor(p, b.team)) 1e9f else hypot(p.x - b.x, p.y - b.y)
@@ -1074,6 +1096,8 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 2 -> { c.spinT = 2.4f; c.spinTick = 0f }
                 3 -> justice(c)
             }
+        } else if (c.hero == 4) {
+            pikaEvent(c)
         }
     }
 
@@ -1125,6 +1149,200 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 val dx = destX - b.x
                 if (abs(dx) > 40f) moveU(b, dx, CY - b.y, 295f, dt)
             }
+        }
+    }
+
+    // ------------------------------------------------------------ PIKACHU
+    // Moveset competitivo clássico: Thunderbolt, Quick Attack, Iron Tail e Volt Tackle.
+    // Passiva Static: a cada 4 s o ataque básico (Thunder Shock) paralisa o alvo.
+
+    private fun castPika(c: Champ, s: Int, ang: Float, dist: Float): Boolean {
+        when (s) {
+            0 -> {
+                if (!begin(c, 0, ang, 0.5f)) return false
+                schedule(c, 0.18f, 0, ang, 0f, null)
+                addFx(12, c.x, c.y, ang, 0.5f, c.team)
+            }
+            1 -> {
+                if (!begin(c, 1, ang, 0.32f)) return false
+                startRush(c, ang, 450f, 2300f, 0, 30f + c.ap * 0.4f + c.level * 3f)
+                c.haste = 2.2f
+                addFx(10, c.x, c.y, ang, 0.45f, c.team)
+            }
+            2 -> {
+                if (!begin(c, 2, ang, 0.6f)) return false
+                schedule(c, 0.22f, 2, ang, 0f, null)
+            }
+            else -> {
+                if (!begin(c, 3, ang, 0.8f)) return false
+                schedule(c, 0.35f, 3, ang, 0f, null)
+                addFx(12, c.x, c.y, ang, 0.6f, c.team)
+            }
+        }
+        return true
+    }
+
+    private fun startRush(c: Champ, ang: Float, dist: Float, spd: Float, kind: Int, dm: Float) {
+        c.vdT = dist / spd + 0.12f
+        c.vdKind = kind
+        c.vdAng = ang
+        c.vdLeft = dist
+        c.vdSpd = spd
+        c.vdDmg = dm
+        c.vdHit.clear()
+        c.face = ang
+    }
+
+    private fun pikaEvent(c: Champ) {
+        val cs = cos(c.evAng)
+        val sn = sin(c.evAng)
+        when (c.evS) {
+            0 -> {
+                // Thunderbolt: raio rápido que atravessa e paralisa
+                val dm = 60f + c.ap * 0.6f + c.level * 6f
+                val p = Proj(c.x + cs * 34f, c.y + sn * 34f, cs * 1700f, sn * 1700f, c.team, dm,
+                    860f, 34f, 5, c, 0.7f, null)
+                p.pierce = 99
+                projs.add(p)
+                burst(c.x + cs * 34f, c.y + sn * 34f, C(0xFFFFEB3B), 10)
+                shake = max(shake, 0.15f)
+            }
+            2 -> {
+                // Iron Tail: cauda de aço varre um arco na frente, causa dano e atrasa
+                val dm = 55f + c.ap * 0.65f + c.level * 6f
+                addFx(11, c.x, c.y, c.evAng, 0.5f, c.team)
+                var any = false
+                for (u in all) {
+                    if (u.dead || u.team == c.team) continue
+                    val dx = u.x - c.x
+                    val dy = u.y - c.y
+                    val dd = hypot(dx, dy)
+                    if (dd > 250f + u.r) continue
+                    var da = atan2(dy, dx) - c.evAng
+                    while (da > Math.PI.toFloat()) da -= 6.2832f
+                    while (da < -Math.PI.toFloat()) da += 6.2832f
+                    if (abs(da) > 1.3f && dd > u.r + 60f) continue
+                    hurt(u, dm, c)
+                    u.slowT = max(u.slowT, 1.8f)
+                    burst(u.x, u.y, C(0xFFCFD8DC), 12)
+                    any = true
+                }
+                if (any) shake = max(shake, 0.35f)
+            }
+            3 -> {
+                // Volt Tackle: investida elétrica atravessa todos no caminho
+                startRush(c, c.evAng, 760f, 2100f, 1, 140f + c.ap * 0.85f + c.level * 10f)
+                addFx(12, c.x, c.y, c.evAng, 0.4f, c.team)
+                shake = max(shake, 0.3f)
+            }
+        }
+    }
+
+    private fun pikaAttack(c: Champ, tg: U) {
+        if (hypot(tg.x - c.x, tg.y - c.y) - tg.r > 420f) return
+        c.atkCd = 0.6f
+        c.face = atan2(tg.y - c.y, tg.x - c.x)
+        c.swingMax = 0.3f
+        c.swing = 0.3f
+        c.swingN++
+        val dm = 20f + c.ap * 0.28f
+        projs.add(Proj(c.x + cos(c.face) * 24f, c.y + sin(c.face) * 24f, 0f, 0f, c.team, dm, 0f, 0f, 6, c, 0f, tg))
+    }
+
+    /** Estática: ataque básico paralisa o alvo a cada 4 s. */
+    private fun staticProc(o: U?, tg: U) {
+        if (o !is Champ || o.passCd > 0f || tg.dead) return
+        o.passCd = 4f
+        tg.rootT = max(tg.rootT, 0.6f)
+        hurt(tg, 16f + o.ap * 0.2f, o)
+        addFx(12, tg.x, tg.y, 0f, 0.6f, o.team)
+        texts.add(FT(tg.x, tg.y, "ESTATICA", 0.9f, C(0xFFFFEB3B)))
+    }
+
+    private fun updVolt(c: Champ, dt: Float) {
+        val step = min(c.vdSpd * dt, c.vdLeft)
+        val cs = cos(c.vdAng)
+        val sn = sin(c.vdAng)
+        c.x = (c.x + cs * step).coerceIn(60f, W - 60f)
+        c.y = (c.y + sn * step).coerceIn(LT + 24f, LB - 24f)
+        c.vdLeft -= step
+        c.vdT -= dt
+        c.face = c.vdAng
+        c.mv = 0.1f
+        c.walk += dt * 120f
+        val volt = c.vdKind == 1
+        if (rnd.nextFloat() < 0.7f) burst(c.x, c.y, if (volt) C(0xFFFFEB3B) else C(0xFFFFFFFF), 1)
+        for (u in all) {
+            if (u.dead || u.team == c.team || c.vdHit.contains(u)) continue
+            if (hypot(u.x - c.x, u.y - c.y) >= u.r + c.r + 36f) continue
+            c.vdHit.add(u)
+            hurt(u, c.vdDmg, c)
+            burst(u.x, u.y, C(0xFFFFEB3B), if (volt) 22 else 8)
+            if (volt) {
+                addFx(13, u.x, u.y, c.vdAng, 0.6f, c.team)
+                shake = max(shake, 0.5f)
+                if (u is Champ) {
+                    u.rootT = max(u.rootT, 0.9f)
+                    texts.add(FT(u.x, u.y, "PARALISIA", 0.9f, C(0xFFFFEB3B)))
+                    // recuo: Volt Tackle machuca o próprio Pikachu (nunca mata)
+                    val rec = c.vdDmg * 0.2f
+                    c.hp = max(1f, c.hp - rec)
+                    c.sinceHurt = 0f
+                    texts.add(FT(c.x, c.y, "RECUO -" + rec.roundToInt(), 0.9f, C(0xFFFF8A65)))
+                }
+            } else {
+                u.slowT = max(u.slowT, 0.9f)
+            }
+        }
+        if (c.vdLeft <= 0.5f || c.vdT <= 0f) {
+            c.vdT = 0f
+            if (volt) {
+                addFx(13, c.x, c.y, c.vdAng, 0.5f, c.team)
+                c.castS = 3; c.castMax = 0.3f; c.castT = 0.3f
+            }
+        }
+    }
+
+    // ----------------------------------------------------------- IA (Pikachu)
+
+    private fun botPika(b: Champ, dt: Float) {
+        if (b.vdT > 0f) return
+        val p = pl
+        val dp = if (p.dead || hiddenFor(p, b.team)) 1e9f else hypot(p.x - b.x, p.y - b.y)
+        val homeX = W - 380f
+        var minX = 0f
+        for (tw in towers) if (!tw.dead && tw.team == 0) minX = max(minX, tw.x + if (tw.nexus) 560f else 680f)
+
+        if (b.hp < b.maxHp * 0.3f) {
+            moveU(b, homeX - b.x, CY - b.y, 320f, dt)
+            if (dp < 600f) cast(b, 1, atan2(CY - b.y, homeX - b.x), 0f, false)
+            return
+        }
+        if (dp < 950f && p.x > minX - 200f) {
+            val ang = atan2(p.y - b.y, p.x - b.x)
+            if (dp < 850f) cast(b, 0, ang, 0f, false)
+            if (dp < 240f) cast(b, 2, ang, 0f, false)
+            if (dp < 700f && (p.hp < p.maxHp * 0.5f || b.level >= 3)) cast(b, 3, ang, 0f, false)
+            if (dp > 380f && dp < 650f) cast(b, 1, ang, 0f, false)
+            var mx = 0f
+            var my = 0f
+            if (dp < 260f) { mx = -cos(ang); my = -sin(ang) }
+            else if (dp > 400f) { mx = cos(ang); my = sin(ang) }
+            val perp = sin(t * 2.1f)
+            mx += -sin(ang) * perp * 0.9f
+            my += cos(ang) * perp * 0.9f
+            if (b.x <= minX && mx < 0f) mx = 0f
+            moveU(b, mx, my, 315f, dt)
+            b.face = ang
+            if (dp < 420f) basicAttack(b, p)
+        } else {
+            var front = W - 1200f
+            for (m in minions) if (!m.dead && m.team == 1) front = min(front, m.x)
+            val destX = max(minX, front + 230f)
+            val tg = nearest(b.x, b.y, b.team, 400f, -50f)
+            if (tg != null) basicAttack(b, tg)
+            val dx = destX - b.x
+            if (abs(dx) > 40f) moveU(b, dx, CY - b.y, 300f, dt)
         }
     }
 
@@ -1199,10 +1417,11 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 val dx = tg.x - q.x
                 val dy = tg.y - q.y
                 val l = hypot(dx, dy)
-                val sp = (when (q.kind) { 0 -> 1100f; 2 -> 1000f; else -> 650f }) * dt
+                val sp = (when (q.kind) { 0 -> 1100f; 2 -> 1000f; 6 -> 1150f; else -> 650f }) * dt
                 if (l <= sp + tg.r) {
                     hurt(tg, q.dmg, q.owner)
-                    burst(tg.x, tg.y, if (q.team == 0) C(0xFFFFF59D) else C(0xFFFF8A80), 4)
+                    burst(tg.x, tg.y, if (q.kind == 6) C(0xFFFFEB3B) else if (q.team == 0) C(0xFFFFF59D) else C(0xFFFF8A80), 4)
+                    if (q.kind == 6) staticProc(q.owner, tg)
                     pi.remove()
                 } else {
                     q.x += dx / l * sp
@@ -1220,8 +1439,13 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                         q.hit.add(u)
                         hurt(u, q.dmg, q.owner)
                         u.rootT = max(u.rootT, q.root)
-                        if (q.kind != 4) u.markT = 6f
-                        burst(u.x, u.y, if (q.kind == 4) C(0xFFFF5A5A) else C(0xFFFFF59D), 12)
+                        if (q.kind != 4 && q.kind != 5) u.markT = 6f
+                        if (q.kind == 5) {
+                            texts.add(FT(u.x, u.y, "PARALISIA", 0.9f, C(0xFFFFEB3B)))
+                            addFx(12, u.x, u.y, 0f, 0.6f, q.team)
+                            shake = max(shake, 0.2f)
+                        }
+                        burst(u.x, u.y, if (q.kind == 4) C(0xFFFF5A5A) else if (q.kind == 5) C(0xFFFFEB3B) else C(0xFFFFF59D), 12)
                         q.pierce--
                         if (q.pierce <= 0) done = true
                     }
@@ -1435,14 +1659,14 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         val px = 12f * d
         val py = 10f * d
         blk(c, px, py, px + 44f * d, py + 44f * d, C(0xFF263238))
-        pt.color = when (pl.hero) { 2 -> C(0xFFDCEBFA); 3 -> C(0xFF6D4C41); else -> C(0xFFFFD54F) }
+        pt.color = when (pl.hero) { 2 -> C(0xFFDCEBFA); 3 -> C(0xFF6D4C41); 4 -> C(0xFF3E2A14); else -> C(0xFFFFD54F) }
         c.drawRect(px + 5f * d, py + 4f * d, px + 39f * d, py + 22f * d, pt)
-        pt.color = if (pl.hero == 2) C(0xFFFFE3D0) else C(0xFFFFCCA8)
+        pt.color = if (pl.hero == 2) C(0xFFFFE3D0) else if (pl.hero == 4) C(0xFFFFE23B) else C(0xFFFFCCA8)
         c.drawRect(px + 11f * d, py + 14f * d, px + 33f * d, py + 36f * d, pt)
         pt.color = if (pl.hero == 2) C(0xFF29C6FF) else C(0xFF212121)
         c.drawRect(px + 15f * d, py + 22f * d, px + 19f * d, py + 26f * d, pt)
         c.drawRect(px + 25f * d, py + 22f * d, px + 29f * d, py + 26f * d, pt)
-        pt.color = when (pl.hero) { 2 -> C(0xFF1E88C8); 3 -> C(0xFF3F7FD6); else -> C(0xFF3F51B5) }
+        pt.color = when (pl.hero) { 2 -> C(0xFF1E88C8); 3 -> C(0xFF3F7FD6); 4 -> C(0xFFF2BE1D); else -> C(0xFF3F51B5) }
         c.drawRect(px + 8f * d, py + 36f * d, px + 36f * d, py + 42f * d, pt)
         val bxx = px + 50f * d
         val bw = 150f * d
@@ -1610,6 +1834,33 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                 pt.color = C(0xFFFFFFFF)
                 c.drawCircle(cx, cy, r * 0.1f, pt)
             }
+            4 -> {
+                pt.color = C(0x55FFEB3B)
+                c.drawCircle(cx, cy, r, pt)
+                pt.color = C(0xFFFFE23B)
+                c.drawCircle(cx, cy + r * 0.12f, r * 0.62f, pt)
+                // orelhas com ponta preta
+                for (sd in intArrayOf(-1, 1)) {
+                    path.reset()
+                    path.moveTo(cx + sd * r * 0.2f, cy - r * 0.25f)
+                    path.lineTo(cx + sd * r * 0.7f, cy - r * 0.98f)
+                    path.lineTo(cx + sd * r * 0.5f, cy - r * 0.15f)
+                    path.close()
+                    pt.color = C(0xFFFFE23B)
+                    c.drawPath(path, pt)
+                    path.reset()
+                    path.moveTo(cx + sd * r * 0.62f, cy - r * 0.8f)
+                    path.lineTo(cx + sd * r * 0.7f, cy - r * 0.98f)
+                    path.lineTo(cx + sd * r * 0.56f, cy - r * 0.7f)
+                    path.close()
+                    pt.color = C(0xFF1A1414)
+                    c.drawPath(path, pt)
+                    pt.color = C(0xFFE53935)
+                    c.drawCircle(cx + sd * r * 0.5f, cy + r * 0.28f, r * 0.14f, pt)
+                    pt.color = C(0xFF1A1414)
+                    c.drawCircle(cx + sd * r * 0.25f, cy + r * 0.05f, r * 0.08f, pt)
+                }
+            }
             else -> {
                 pt.color = C(0x554F7FE8)
                 c.drawCircle(cx, cy, r, pt)
@@ -1637,20 +1888,21 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
         hudText(c, "ESCOLHA SEU CAMPEÃO", w / 2f, h * 0.13f, 20f, C(0xFFFFD54F), Paint.Align.CENTER)
         hudText(c, "toque em um card para jogar", w / 2f, h * 0.13f + 20f * d, 11f, C(0xFFB0BEC5), Paint.Align.CENTER)
         val gap = 12f * d
-        val cw = (w - gap * 5f) / 4f
+        val cw = (w - gap * 6f) / 5f
         val top = h * 0.24f
         val btm = h * 0.93f
-        val names = arrayOf("LUX", "YASUO", "YUKI", "GAREN")
-        val roles = arrayOf("Maga de luz", "Espadachim (kit de luz)", "Ninja do gelo", "Guerreiro demaciano")
-        val kind = arrayOf("À distância", "À distância", "Corpo a corpo", "Corpo a corpo")
-        val accent = intArrayOf(C(0xFFFFD54F), C(0xFF4DB6AC), C(0xFF29C6FF), C(0xFF4F7FE8))
+        val names = arrayOf("LUX", "YASUO", "YUKI", "GAREN", "PIKACHU")
+        val roles = arrayOf("Maga de luz", "Espadachim (kit de luz)", "Ninja do gelo", "Guerreiro demaciano", "Rato elétrico")
+        val kind = arrayOf("À distância", "À distância", "Corpo a corpo", "Corpo a corpo", "Curto alcance")
+        val accent = intArrayOf(C(0xFFFFD54F), C(0xFF4DB6AC), C(0xFF29C6FF), C(0xFF4F7FE8), C(0xFFFFEB3B))
         val kit = arrayOf(
             arrayOf("Q Prisão de Luz", "W Barreira", "E Singularidade", "R Centelha Final"),
             arrayOf("Q Prisão de Luz", "W Barreira", "E Singularidade", "R Centelha Final"),
             arrayOf("Q Estilhaço Gélido", "W Clone de Gelo (2x)", "E Corte Glacial", "R Selo do Inverno"),
-            arrayOf("Q Golpe Decisivo", "W Coragem", "E Julgamento", "R Justiça Demaciana")
+            arrayOf("Q Golpe Decisivo", "W Coragem", "E Julgamento", "R Justiça Demaciana"),
+            arrayOf("Q Trovoada", "W Ataque Rápido", "E Cauda de Ferro", "R Investida Trovão")
         )
-        for (i in 0..3) {
+        for (i in 0..4) {
             val l = gap + i * (cw + gap)
             val r = l + cw
             pkl[i] = l; pkr[i] = r; pkt[i] = top; pkb[i] = btm
@@ -1803,6 +2055,45 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
                     boldCircle(c, x, y, r * 0.8f, 2.2f * d, 0xFFE9A0, a)
                 }
             }
+            4 -> when (i) {
+                0 -> {
+                    // Trovoada: raio em zigue-zague
+                    glow(c, x, y, r * 0.95f, 0xFFEB3B, a)
+                    val zx = floatArrayOf(0.35f, -0.15f, 0.15f, -0.45f)
+                    val zy = floatArrayOf(-0.8f, -0.15f, -0.05f, 0.8f)
+                    for (k in 0..2) bold(c, x + zx[k] * r, y + zy[k] * r, x + zx[k + 1] * r, y + zy[k + 1] * r, 4.4f * d, 0xFFF176, a)
+                    bold(c, x + zx[1] * r, y + zy[1] * r, x + zx[2] * r, y + zy[2] * r, 2f * d, 0xFFFFFF, a)
+                }
+                1 -> {
+                    // Ataque Rápido: linhas de velocidade e seta
+                    glow(c, x, y, r * 0.95f, 0xFFFFFF, a)
+                    for (k in -1..1) bold(c, x - r * 0.8f, y + k * r * 0.34f, x - r * 0.05f + (1 - kotlin.math.abs(k)) * r * 0.15f, y + k * r * 0.34f, 3.2f * d, 0xE0F7FF, a)
+                    bold(c, x - r * 0.1f, y, x + r * 0.75f, y, 4.4f * d, 0xFFEB3B, a)
+                    bold(c, x + r * 0.75f, y, x + r * 0.38f, y - r * 0.38f, 4f * d, 0xFFEB3B, a)
+                    bold(c, x + r * 0.75f, y, x + r * 0.38f, y + r * 0.38f, 4f * d, 0xFFEB3B, a)
+                }
+                2 -> {
+                    // Cauda de Ferro: cauda de aço em raio
+                    glow(c, x, y, r * 0.95f, 0xB0BEC5, a)
+                    bold(c, x - r * 0.6f, y + r * 0.7f, x - r * 0.1f, y + r * 0.1f, 4.4f * d, 0x8D6E63, a)
+                    bold(c, x - r * 0.1f, y + r * 0.1f, x - r * 0.3f, y - r * 0.2f, 5f * d, 0xCFD8DC, a)
+                    bold(c, x - r * 0.3f, y - r * 0.2f, x + r * 0.5f, y - r * 0.75f, 5f * d, 0xECEFF1, a)
+                    boldCircle(c, x + r * 0.1f, y - r * 0.1f, r * 0.82f, 1.8f * d, 0xFFFFFF, a / 2)
+                }
+                else -> {
+                    // Investida Trovão: esfera elétrica com raios
+                    glow(c, x, y, r * (0.9f + 0.08f * pu), 0xFFEB3B, a)
+                    pt.color = (a shl 24) or 0xFFF176
+                    c.drawCircle(x, y, r * 0.42f, pt)
+                    pt.color = (a shl 24) or 0xFFFFFF
+                    c.drawCircle(x, y, r * 0.2f, pt)
+                    for (k in 0..5) {
+                        val an = k * 1.0472f + t * 2f
+                        bold(c, x + cos(an) * r * 0.5f, y + sin(an) * r * 0.5f, x + cos(an + 0.3f) * r * 0.72f, y + sin(an + 0.3f) * r * 0.72f, 3f * d, 0xFFEB3B, a)
+                        bold(c, x + cos(an + 0.3f) * r * 0.72f, y + sin(an + 0.3f) * r * 0.72f, x + cos(an) * r * 0.92f, y + sin(an) * r * 0.92f, 3f * d, 0xFFFFFF, a)
+                    }
+                }
+            }
             1 -> when (i) {
                 0 -> {
                     glow(c, x, y, r * 0.95f, 0x7FD8FF, a)
@@ -1929,7 +2220,7 @@ class GameView(ctx: Context) : FrameLayout(ctx) {
 
     private fun pDown(id: Int, x: Float, y: Float) {
         if (picking) {
-            for (i in 0..3) {
+            for (i in 0..4) {
                 if (x >= pkl[i] && x <= pkr[i] && y >= pkt[i] && y <= pkb[i]) {
                     pickSel = i
                     startMatch(i)

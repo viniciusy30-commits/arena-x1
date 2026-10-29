@@ -1,3 +1,13 @@
+#id 2026-10-29-a
+#titulo Pikachu jogável
+- Novo campeão na escolha: Pikachu, com o moveset clássico competitivo
+- Q Trovoada (Thunderbolt): raio rápido que atravessa e paralisa
+- W Ataque Rápido (Quick Attack): investida curta e velocidade extra
+- E Cauda de Ferro (Iron Tail): golpe em arco com a cauda de aço, atrasa os inimigos
+- R Investida Trovão (Volt Tackle): atravessa todos no caminho, paralisa e causa recuo
+- Passiva Estática: a cada 4 s o Choque do Trovão (ataque básico) paralisa o alvo
+- Modelo 3D próprio, efeitos elétricos e o bot também joga de Pikachu
+
 #id 2026-10-27-e
 #titulo Anexo do Script mais confiável
 - A conferência do anexo olha só ao redor do próprio arquivo (antes podia ficar presa)

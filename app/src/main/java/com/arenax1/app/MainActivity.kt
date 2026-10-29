@@ -166,7 +166,13 @@ class MainActivity : AppCompatActivity() {
                     "• E: Singularidade, zona que atrasa e explode (toque de novo para explodir antes)\n" +
                     "• R: Centelha Final, laser gigante\n\n" +
                     "Toque numa habilidade para mirar automático, ou segure e arraste para mirar na mão.\n" +
-                    "Passiva: habilidades marcam o alvo e o próximo ataque causa dano extra."
+                    "Passiva: habilidades marcam o alvo e o próximo ataque causa dano extra.\n\n" +
+                    "PIKACHU (curto alcance):\n" +
+                    "• Q Trovoada: raio que atravessa e paralisa\n" +
+                    "• W Ataque Rápido: investida curta que dá velocidade\n" +
+                    "• E Cauda de Ferro: golpe em arco que atrasa\n" +
+                    "• R Investida Trovão: atravessa todos e paralisa, com recuo\n" +
+                    "• Passiva Estática: a cada 4 s o ataque básico paralisa"
             )
             .setPositiveButton("Entendi", null)
             .show()
